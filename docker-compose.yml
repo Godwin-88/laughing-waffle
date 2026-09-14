@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: takwimu-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-takwimu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-takwimu_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-takwimu_lms}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-takwimu} -d ${POSTGRES_DB:-takwimu_lms}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    container_name: takwimu-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
+  redisdata:

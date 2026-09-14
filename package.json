@@ -1,0 +1,28 @@
+{
+  "name": "takwimu-lms-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Takwimu Data School LMS — Sprint 1-2 (Auth, Profile, Course Catalogue). Full-stack monorepo: Fastify API + Next.js web client.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "npm run db:migrate --workspace @takwimu/api",
+    "db:seed": "npm run db:seed --workspace @takwimu/api",
+    "dev:api": "npm run dev --workspace @takwimu/api",
+    "dev:web": "npm run dev --workspace @takwimu/web",
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev:api\" \"npm run dev:web\"",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspace @takwimu/api",
+    "build": "npm run build --workspace @takwimu/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

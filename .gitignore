@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+
+# env & secrets
+.env
+.env.local
+.env*.local
+
+# build output
+dist/
+build/
+.next/
+out/
+
+# runtime data (dev storage + local db volumes)
+data/
+apps/api/data/
+
+# logs
+*.log
+logs/
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# coverage
+coverage/
+
+# misc
+*.tsbuildinfo
