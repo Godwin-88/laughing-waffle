@@ -1,6 +1,6 @@
 # Architecture
 
-Scope delivered through **Sprint 4** of the master specification, with diagrams for key flows.
+Scope delivered through **Sprint 5** of the master specification, with diagrams for key flows.
 
 ## Delivered scope
 
@@ -8,8 +8,9 @@ Scope delivered through **Sprint 4** of the master specification, with diagrams 
 | --- | --- | --- |
 | **1 — Foundation & Auth** | Email/password + argon2id, email verification, JWT access + httpOnly refresh rotation, RBAC (`learner`/`instructor`/`admin`), Google/Microsoft SSO scaffolding, rate limiting, Helmet CSP | US-1.1.1, US-1.1.2 |
 | **2 — Profiles & Catalogue** | 3-step onboarding wizard, bio, avatar (sharp), ranked tsvector + pg_trgm search, facets, sort, pagination; seeded 3-course catalogue + 12-module AWS AI track | US-1.2.x, US-2.1.x |
-| **3 — Enrolment & Video** | Free enrolment, enrolment context, playback-position persistence, auto-complete @95%, HLS lesson player (hls.js), enrolment-gated streaming proxy with Range | US-2.2.1, US-3.1.1 |
+| **3 — Enrolment & Video** | Free enrolment, enrolment context, playback-position persistence, HLS lesson player (hls.js), enrolment-gated streaming proxy with Range | US-2.2.1, US-3.1.1 |
 | **4 — Builder & Pipeline** | Instructor Studio (course/module/lesson CRUD + publish, ownership-scoped), chunked 5 MB upload (local/B2), FFmpeg HLS worker (360p/720p/1080p), captions & posters | US-4.1.1, US-4.1.2, US-4.1.3 |
+| **5 — Quizzes & Progress** | Graded end-of-module quizzes (server-side grading, snapshot attempts, time limit + auto-submit, max attempts + cooldown, shuffle, gradebook), progress engine (text auto-complete on scroll/timer, video ≥90% watched, quiz auto-complete on submission, SSE real-time progress stream) | US-3.2.2, US-5.1.1 |
 
 ## Runtime map
 
@@ -23,7 +24,9 @@ flowchart LR
         AUTH["auth — US-1.1.x"]
         PROF["profile — US-1.2.x"]
         CAT["catalogue — US-2.1.x"]
-        ENR["enrolments — US-2.2.1 / 3.1.1"]
+        ENR["enrolments — US-2.2.1 / 3.1.1 / 5.1.1"]
+        QUIZ["quizzes — US-3.2.2"]
+        SSE["SSE /me/progress/events — US-5.1.1"]
         VID["video (upload API)"]
         MEDIA["media (HLS streaming proxy)"]
         BLD["builder — US-4.1.x"]
@@ -31,13 +34,14 @@ flowchart LR
     end
 
     NEXT --> AUTH_PLUGIN
-    NEXT --> AUTH & PROF & CAT & ENR & VID & MEDIA & BLD
+    NEXT --> AUTH & PROF & CAT & ENR & VID & MEDIA & BLD & QUIZ & SSE
 
     AUTH & PROF --> PG[("PostgreSQL 16")]
     CAT --> PG
     ENR --> PG
     BLD --> PG
     VID --> PG
+    QUIZ --> PG
     MEDIA --> PG
     VID --> TRANSCODER["FFmpeg worker"]
     TRANSCODER --> STORE["Storage<br/>local | B2"]
@@ -115,13 +119,48 @@ sequenceDiagram
     A->>A: "gate: enrolled? lesson has hlsPrefix?"
     A-->>L: "200 HLS content (Range for .ts) or 403 / 404"
     L->>L: "hls.js loads master, picks ladder rung, plays"
-    Note over L: Resume at savedPositionMs,<br/>progress autosaved every 5 s,<br/>auto-complete at 95% duration
+    Note over L: Resume at savedPositionMs,<br/>progress autosaved every 5 s,<br/>auto-complete at >=90% duration
+```
+
+## Graded quiz flow (US-3.2.2)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor L as Learner
+    participant N as Next.js web
+    participant A as Fastify API
+    participant P as PostgreSQL
+
+    L->>N: Open module-quiz lesson
+    N->>A: GET /courses/:slug/lessons/:position/quiz/status (Bearer)
+    A->>P: attempts + best grade + cooldown
+    A-->>N: "200 { config, questionCount, attemptsUsed, bestAttempt, canAttempt }"
+
+    L->>N: Start quiz
+    N->>A: POST .../quiz/attempts
+    A->>P: finaliseExpiredAttempts (auto-submit stale)
+    A->>P: insert quiz_attempt (status=in_progress, expires_at, snapshot)
+    A-->>N: "200 { attemptId, expiresAt, questions[] } (options shuffled, answers masked)"
+
+    Note over N: Countdown timer vs expiresAt, auto-submits at 0
+    L->>N: Answer all questions
+    N->>A: POST .../attempts/:id/submit { answers }
+    A->>A: gradeQuizSnapshot (server-side, vs snapshot)
+    A->>P: gradebook upsert (score, percent, passed, submitted_at)
+    A->>P: lesson_progress completed=true
+    A-->>N: "200 { score, percent, passed, gradebook, per-question results + explanations }"
+    A--)N: SSE "lesson-completed { coursePercent }"
+```
+
 ## Data model
 
 ```mermaid
 erDiagram
     USERS ||--o{ ENROLMENTS : enrols
     USERS ||--o{ PROGRESS : tracks
+    USERS ||--o{ QUIZ_ATTEMPTS : takes
+    USERS ||--o{ GRADEBOOK : owns
     USERS ||--o{ COURSE_REVIEWS : writes
     USERS ||--o{ VIDEO_ASSETS : uploads
     USERS ||--o{ ANALYTICS_EVENTS : emits
@@ -131,6 +170,7 @@ erDiagram
     COURSES ||--o{ ENROLMENTS : has
     COURSES ||--o{ COURSE_REVIEWS : receives
     COURSES ||--o{ QUIZ_QUESTIONS : associated
+    COURSES ||--o{ QUIZ_ATTEMPTS : scoped
     COURSES ||--o{ VIDEO_ASSETS : owns
     COURSES ||--o{ ANALYTICS_EVENTS : scoped
 
@@ -138,7 +178,9 @@ erDiagram
     MODULES ||--o{ QUIZ_QUESTIONS : scopes
 
     LESSONS ||--o{ PROGRESS : measured
-    LESSONS ||--o{ QUIZ_QUESTIONS : "quick-check"
+    LESSONS ||--o{ QUIZ_QUESTIONS : "quick-check + graded"
+    LESSONS ||--o{ QUIZ_ATTEMPTS : snapshots
+    LESSONS ||--o{ GRADEBOOK : grades
     LESSONS ||--o{ VIDEO_ASSETS : "video source(s)"
 
     VIDEO_ASSETS ||--o{ TRANSCODE_JOBS : "queues"
@@ -213,6 +255,35 @@ erDiagram
         timestamptz updated_at
         text unique_user_lesson "UK(user_id, lesson_id)"
     }
+    QUIZ_ATTEMPTS {
+        uuid id PK
+        uuid user_id FK
+        uuid course_id FK
+        uuid lesson_id FK
+        int attempt_number
+        text status "in_progress|submitted|expired"
+        timestamptz started_at
+        timestamptz expires_at
+        jsonb questions_snapshot "shuffled, answers masked"
+        jsonb answers
+        int score
+        int max_score
+        numeric percent
+        boolean passed
+        boolean auto_submitted
+    }
+    GRADEBOOK {
+        uuid id PK
+        uuid user_id FK
+        uuid lesson_id FK
+        text item_type "quiz"
+        int score
+        int max_score
+        numeric percent
+        boolean passed
+        timestamptz submitted_at
+        text unique_user_item "UK(user_id, lesson_id)"
+    }
     VIDEO_ASSETS {
         uuid id PK
         uuid course_id FK
@@ -253,14 +324,18 @@ flowchart LR
     E -- Yes --> F["Paid checkout (Sprint 6 not built) -> blocked"]
     E -- No --> G["Insert enrolment (unique user+course)"]
     G --> H["Redirect to first lesson"]
-    H --> I["Read lesson (video or text)"]
-    I --> J{"Video lesson?"}
-    J -- Yes --> K["hls.js player; autosave position every 5 s"]
-    I --> L["Text lesson; button: Mark as complete"]
-    K --> M[">=95% watched -> completed=true"]
-    L --> M
-    M --> N["Course % = completed / total lessons"]
-    N --> O["Dashboard My Learning; resume at last position"]
+    H --> I{"Lesson kind?"}
+    I -- video --> K["hls.js player; autosave every 5 s"]
+    K --> K2{max position >= 90% duration?}
+    K2 -- Yes --> M["completed=true (US-5.1.1)"]
+    K2 -- No --> L2["watch-threshold SSE event"]
+    I -- text --> T["auto-complete on scroll-to-bottom OR 60s on page"]
+    T --> M
+    I -- quiz --> Q["auto-complete on submission (gradebook write)"]
+    Q --> M
+    M --> N["lesson_progress upsert (survives session expiry)"]
+    N --> N2["SSE lesson-completed { coursePercent }"]
+    N2 --> O["Dashboard My Learning bar updates in real time"]
 ```
 
 ## Delivery roadmap (master spec)
@@ -279,7 +354,7 @@ gantt
     section Sprint 4
     Course builder, video pipeline    :s4, after s3, 7d
     section Sprint 5
-    Video player & engagement         :s5, after s4, 7d
+    Graded quizzes & progress engine  :s5, after s4, 7d
     section Sprint 6
     Checkout & payments               :s6, after s5, 7d
     section Sprint 7
@@ -292,5 +367,5 @@ gantt
     Hardening, observability, launch  :s10, after s9, 7d
 ```
 
-**Done:** Sprints 1–4 · **Next:** Sprint 5 (player polish + engagement), 6 (checkout — currently blocks paid enrolment), 7–10.
+**Done:** Sprints 1–5 · **Next:** Sprint 6 (paid checkout — currently blocks paid enrolment on priced courses), 7–10.
 ```

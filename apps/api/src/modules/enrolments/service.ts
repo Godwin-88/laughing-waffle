@@ -12,6 +12,7 @@ import { getDb } from "../../db/client";
 import { courses, enrolments, lessons, progress } from "../../db/schema";
 import { badRequest, forbidden, notFound } from "../../lib/errors";
 import { emitAnalyticsEvent } from "../../lib/events";
+import { publishProgressEvent } from "../../lib/progress-events";
 
 export interface SaveProgressInput {
   courseSlug: string;
@@ -110,7 +111,7 @@ async function courseProgressStats(
     sql`
       SELECT MIN(l.position) AS p
       FROM lessons l
-      LEFT JOIN progress pr
+      LEFT JOIN lesson_progress pr
         ON pr.lesson_id = l.id AND pr.user_id = ${userId}
       WHERE l.course_id = ${courseId} AND l.published = true
         AND (pr.id IS NULL OR pr.completed = false)
@@ -268,11 +269,12 @@ export async function saveProgress(
   const lesson = lessonRows[0];
 
   const positionMs = Math.max(0, Math.round(input.positionMs || 0));
+  // US-5.1.1 — video lesson marks complete at ≥90 % of duration (non-contiguous ok).
   const videoComplete =
     lesson.kind === "video" &&
     typeof lesson.duration === "number" &&
     lesson.duration > 0 &&
-    positionMs >= lesson.duration * 950;
+    positionMs >= lesson.duration * 900;
   const completed = Boolean(input.completed || videoComplete);
 
   const [lessonRow] = await db
@@ -304,6 +306,23 @@ export async function saveProgress(
     courseId: course.id,
     lessonId: input.lessonId,
     payload: { positionMs, completed },
+  });
+
+  // US-5.1.1 — push real-time progress to the learner's SSE stream.
+  const lessonTitleRows = await db
+    .select({ title: lessons.title })
+    .from(lessons)
+    .where(eq(lessons.id, input.lessonId))
+    .limit(1);
+  publishProgressEvent(userId, {
+    event: completed ? "lesson-completed" : "position-saved",
+    courseSlug: course.slug,
+    lessonId: input.lessonId,
+    completed,
+    positionMs,
+    coursePercent: stats.percent,
+    lessonTitle: lessonTitleRows[0]?.title ?? "Lesson",
+    at: new Date().toISOString(),
   });
 
   return {

@@ -6,6 +6,8 @@ import { MarkdownView } from "@/components/MarkdownView";
 import { QuickCheck } from "@/components/QuickCheck";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { MarkCompleteButton } from "@/components/MarkCompleteButton";
+import { GradedQuiz } from "@/components/GradedQuiz";
+import { TextLessonCompletion } from "@/components/TextLessonCompletion";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +61,13 @@ export default async function LessonPage({ params }: Props) {
               <VideoPlayer lesson={lesson} courseSlug={slug} />
             </div>
           ) : null}
-          <MarkdownView lesson={lesson} />
+          {/* US-3.2.2 — graded quizzes render the quiz experience (answers never
+              ship via the catalogue payload; the attempt API serves them). */}
+          {lesson.kind === "quiz" ? (
+            <GradedQuiz lessonId={lesson.id} courseSlug={slug} position={lesson.position} />
+          ) : (
+            <MarkdownView lesson={lesson} />
+          )}
         </div>
         <hr className="mt-8 border-ink-200" />
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
@@ -67,7 +75,11 @@ export default async function LessonPage({ params }: Props) {
             ← Back to syllabus
           </Link>
           <div className="flex items-center gap-3">
-            {lesson.kind !== "video" ? <MarkCompleteButton lesson={lesson} courseSlug={slug} /> : null}
+            {lesson.kind === "text" ? <TextLessonCompletion lesson={lesson} courseSlug={slug} /> : null}
+            {/* notebook / lab lessons keep a manual control; text/video/quiz auto-complete (US-5.1.1). */}
+            {lesson.kind === "notebook" || lesson.kind === "lab" ? (
+              <MarkCompleteButton lesson={lesson} courseSlug={slug} />
+            ) : null}
             {hasNext ? (
               <Link href={`/courses/${slug}/lessons/${nextPos}`} className="rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">
                 Next lesson →
@@ -77,7 +89,7 @@ export default async function LessonPage({ params }: Props) {
         </div>
       </article>
 
-      <QuickCheck questions={lesson.quizQuestions} />
+      {lesson.kind !== "quiz" ? <QuickCheck questions={lesson.quizQuestions} /> : null}
     </div>
   );
 }

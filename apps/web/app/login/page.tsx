@@ -1,12 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authApi, ApiClientError } from "@/lib/api";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -18,8 +16,9 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await authApi.login(email, password);
-      router.push("/dashboard");
-      router.refresh();
+      // Full-page navigation re-mounts AuthProvider so the session bootstraps
+      // from the httpOnly refresh cookie (in-memory access token is lost on reload).
+      window.location.href = "/dashboard";
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Something went wrong. Please try again.");
     } finally {

@@ -46,13 +46,30 @@ Base URL: `http://localhost:4000/api/v1` (configurable via `PUBLIC_API_URL`).
 | `GET` | `/enrolments` | bearer | My enrolments + progress summaries (response: `{ items }`) |
 | `GET` | `/courses/:slug/enrolment` | optional | `{enrolled, progressPercent, firstLessonPosition, lastLessonPosition, nextLessonPosition}` |
 
-## Progress — Sprint 3
+## Progress — Sprint 3 · completion rules updated in Sprint 5 (US-5.1.1)
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `PUT` | `/progress` | bearer | Save `{courseSlug, lessonId, positionMs, completed?}` (video auto-completes @95%) |
-| `POST` | `/progress/lessons/:lessonId/complete` | bearer | Mark text lessons complete |
+| `PUT` | `/progress` | bearer | Save `{courseSlug, lessonId, positionMs, completed?}` (video auto-completes at ≥90% watched); publishes SSE event |
+| `POST` | `/progress/lessons/:lessonId/complete` | bearer | Mark a lesson complete (text auto-complete on scroll-to-bottom OR 60s on page) |
 | `GET` | `/courses/:slug/progress` | bearer | Lesson-by-lesson progress list + course percent |
+| `GET` | `/me/progress/events` | bearer **or `?token=`** | SSE stream — `lesson-completed`, `position-saved`, `watch-threshold` events (US-5.1.1) |
+
+Completion rules (persisted in `lesson_progress`, survives session expiry):
+
+- **Video** → complete when max position ≥ 90% of duration (non-contiguous ok).
+- **Text** → complete on scroll-to-bottom OR 60 seconds on page (fires once).
+- **Quiz / assignment** → complete on submission (gradebook write).
+
+## Graded quizzes — Sprint 5 (US-3.2.2)
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/courses/:slug/lessons/:position/quiz/status` | bearer + enrolled | `{config, questionCount, attemptsUsed, bestAttempt, latestAttempt, canAttempt, cooldownRemainingSeconds, maxAttemptsReached}` |
+| `POST` | `/courses/:slug/lessons/:position/quiz/attempts` | bearer + enrolled | Start an attempt → `{attemptId, attemptNumber, status, expiresAt, questions[]}` — questions shuffled, **answers masked** |
+| `POST` | `/courses/:slug/lessons/:position/quiz/attempts/:attemptId/submit` | bearer + enrolled | Submit `{answers: [{questionId, selectedIndex}]}` → `{score, maxScore, percent, passed, gradebook, questions[] w/ explanations}` |
+
+Rules: time limit in `{0,15,30,60,90,120}` mins with server-side auto-submit of stale attempts; max attempts + optional cooldown; randomised question/answer order (configurable per quiz); grade written to the `gradebook` immediately on submission; quiz submission auto-completes the lesson.
 
 ## Video upload — Sprint 4 (instructor)
 

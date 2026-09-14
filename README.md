@@ -5,7 +5,7 @@
 
 A full-stack TypeScript monorepo: **Fastify 5** API, **Next.js 15** web client, shared typed contract layer, Postgres 16 schema + migrations, seeded curriculum, and a self-hosted video pipeline (chunked upload → FFmpeg HLS transcode → enrolment-gated streaming).
 
-- **Sprints 1–4 delivered** — Auth & onboarding · Catalogue & search · Enrolment, progress & video lessons · Course builder & video pipeline. See [`docs/architecture.md`](docs/architecture.md) for scope and [`docs/development.md`](docs/development.md) for the roadmap.
+- **Sprints 1–5 delivered** — Auth & onboarding · Catalogue & search · Enrolment, progress & video lessons · Course builder & video pipeline · Graded quizzes & real-time progress engine (SSE). See [`docs/architecture.md`](docs/architecture.md) for scope and [`docs/development.md`](docs/development.md) for the roadmap.
 
 ```mermaid
 flowchart LR

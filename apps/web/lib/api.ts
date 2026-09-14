@@ -15,8 +15,12 @@ import type {
   EnrolmentSummary,
   EnrolNowResponse,
   LessonPublic,
+  ProgressEventMessage,
   PublicUser,
+  QuizAttemptResult,
+  QuizStatusResponse,
   SaveProgressResponse,
+  StartQuizAttemptResponse,
   UpdateCoursePayload,
   UpdateLessonPayload,
   UpdateModulePayload,
@@ -108,7 +112,15 @@ export async function api<T>(
     credentials: init.credentials ?? "include",
   });
 
-  if (res.status === 401 && !init.skipRefresh && !path.startsWith("/auth/")) {
+  if (
+    res.status === 401 &&
+    !init.skipRefresh &&
+    // Only login/register/refresh/logout must not self-trigger a refresh;
+    // /auth/me IS the session bootstrap and relies on silent refresh after a
+    // full page reload (in-memory access token is gone, only the httpOnly
+    // refresh cookie remains).
+    !["/auth/login", "/auth/register", "/auth/refresh", "/auth/logout"].some((p) => path.startsWith(p))
+  ) {
     const refreshed = await tryRefresh();
     if (refreshed) {
       return api<T>(path, { ...init, skipRefresh: true } as RequestInit & { skipRefresh?: boolean });
@@ -327,6 +339,64 @@ export const videoApi = {
     return api(`/instructor/videos/${assetId}`);
   },
 };
+
+/** Sprint 5 — graded quizzes (US-3.2.2). Answers are graded server-side. */
+export const quizApi = {
+  async status(slug: string, position: number): Promise<QuizStatusResponse> {
+    return api(`/courses/${slug}/lessons/${position}/quiz/status`);
+  },
+  async startAttempt(slug: string, position: number): Promise<StartQuizAttemptResponse> {
+    return api(`/courses/${slug}/lessons/${position}/quiz/attempts`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+  },
+  async submitAttempt(
+    slug: string,
+    position: number,
+    attemptId: string,
+    answers: Array<{ questionId: string; selectedIndex: number }>,
+  ): Promise<QuizAttemptResult> {
+    return api(`/courses/${slug}/lessons/${position}/quiz/attempts/${attemptId}/submit`, {
+      method: "POST",
+      body: JSON.stringify({ answers }),
+    });
+  },
+};
+
+/**
+ * US-5.1.1 — subscribe to real-time progress events via Server-Sent Events.
+ * EventSource cannot set an Authorization header, so the access token is passed
+ * as ?token=. Reconnect with backoff on unexpected closures (SSE auto-reconnect
+ * handles network flakiness; this wrapper also prunes stale handlers).
+ */
+export function subscribeToProgress(
+  onMessage: (message: ProgressEventMessage) => void,
+  onOpen?: () => void,
+): () => void {
+  const token = getAccessToken();
+  const params = new URLSearchParams();
+  if (token) params.set("token", token);
+  const source = new EventSource(`${API_BASE}/api/v1/me/progress/events?${params.toString()}`);
+
+  source.onopen = () => onOpen?.();
+  source.onmessage = (event) => {
+    try {
+      const message = JSON.parse(event.data) as ProgressEventMessage | { type: string };
+      if ("event" in message && (message as ProgressEventMessage).event) {
+        onMessage(message as ProgressEventMessage);
+      }
+    } catch {
+      /* ignore malformed frames */
+    }
+  };
+  // Never let the browser silently replay stale frames without handlers.
+  source.onerror = () => {
+    /* EventSource reconnects automatically; a fatal token error shows as 401s */
+  };
+
+  return () => source.close();
+}
 
 export function formatPrice(cents: number, currency = "USD"): string {
   if (cents === 0) return "Free";

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { CourseSummary, EnrolmentSummary } from "@takwimu/shared";
-import { catalogueApi, enrolmentApi, formatPrice, profileApi, skillLabel } from "@/lib/api";
+import { catalogueApi, enrolmentApi, formatPrice, profileApi, skillLabel, subscribeToProgress } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
 export default function DashboardPage() {
@@ -18,6 +18,15 @@ export default function DashboardPage() {
     setBio(user.bio ?? "");
     void catalogueApi.list({ sort: "rating", pageSize: 3 }).then((res) => setRecommended(res.items)).catch(() => {});
     void enrolmentApi.mine().then(setEnrolments).catch(() => {});
+
+    // US-5.1.1 — real-time progress bar updates: when a completion event arrives
+    // for one of my courses, refresh the enrolment list so progress bars move
+    // without a page reload.
+    const close = subscribeToProgress((message) => {
+      if (message.event !== "lesson-completed") return;
+      void enrolmentApi.mine().then(setEnrolments).catch(() => {});
+    });
+    return close;
   }, [user]);
 
   if (loading) return <div className="p-16 text-ink-500">Loading…</div>;

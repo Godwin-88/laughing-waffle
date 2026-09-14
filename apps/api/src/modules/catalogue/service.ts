@@ -354,15 +354,32 @@ export async function getLessonByPosition(
     summary: lesson.summary,
     content: lesson.content,
     kind: lesson.kind as "text" | "video" | "notebook" | "lab" | "quiz",
-    quizQuestions: quizRows.map((q) => ({
-      id: q.id,
-      lessonId: q.lessonId,
-      position: q.position,
-      prompt: q.prompt,
-      options: q.options,
-      correctIndex: q.correctIndex,
-      explanation: q.explanation,
-    }) as QuizQuestion),
+    // US-3.2.2 — graded quiz answers are never shipped to the client before
+    // submission; only the masked count is exposed here. The quiz attempt API
+    // serves the questions (with shuffled options) and grades server-side.
+    quizQuestions:
+      lesson.kind === "quiz"
+        ? []
+        : quizRows.map((q) => ({
+            id: q.id,
+            lessonId: q.lessonId,
+            position: q.position,
+            prompt: q.prompt,
+            options: q.options,
+            correctIndex: q.correctIndex,
+            explanation: q.explanation,
+          }) as QuizQuestion),
+    quizConfig:
+      lesson.kind === "quiz"
+        ? {
+            timeLimitMinutes: lesson.quizTimeLimitMinutes,
+            passPercent: lesson.quizPassPercent,
+            maxAttempts: lesson.quizMaxAttempts,
+            attemptCooldownMinutes: lesson.quizAttemptCooldownMinutes,
+            shuffleQuestions: lesson.quizShuffleQuestions,
+            shuffleAnswers: lesson.quizShuffleAnswers,
+          }
+        : null,
     video: await buildLessonVideoPayload(course.id, lesson, userId),
   };
 }

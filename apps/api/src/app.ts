@@ -16,6 +16,7 @@ import { registerEnrolmentRoutes } from "./modules/enrolments/routes";
 import { registerVideoRoutes } from "./modules/video/routes";
 import { registerMediaRoutes } from "./modules/video/media";
 import { registerBuilderRoutes } from "./modules/builder/routes";
+import { registerQuizRoutes, registerProgressEventsRoute } from "./modules/quizzes/routes";
 import { getStorage } from "./storage/storage";
 
 export interface BuildOptions {
@@ -100,6 +101,8 @@ export async function buildApp(opts: BuildOptions = {}) {
           registerVideoRoutes(v1);
           registerMediaRoutes(v1);
           registerBuilderRoutes(v1);
+          registerQuizRoutes(v1);
+          registerProgressEventsRoute(v1);
         },
         { prefix: "/v1" },
       );

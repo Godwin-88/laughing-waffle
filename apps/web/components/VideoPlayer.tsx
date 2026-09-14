@@ -57,12 +57,28 @@ export function VideoPlayer({ lesson, courseSlug, className }: VideoPlayerProps)
     };
     video.addEventListener("loadedmetadata", resume);
 
+    // US-5.1.1 — mark complete once ≥ 90% of the duration has been played
+    // (non-contiguous ok). Track the max position reached; the server persists
+    // completion so progress survives session expiry.
+    let maxWatchedMs = 0;
+    let completionSent = false;
+    const completionThreshold = Math.max(1, Math.floor((info.durationSeconds ?? 0) * 0.9 * 1000));
+
     let lastSeen = 0;
     const interval = setInterval(() => {
       if (!video || Number.isNaN(video.currentTime)) return;
       const pos = Math.floor(video.currentTime * 1000);
       if (Math.abs(pos - lastSeen) < 500) return;
       lastSeen = pos;
+      maxWatchedMs = Math.max(maxWatchedMs, pos);
+      const completed = completionThreshold > 0 && maxWatchedMs >= completionThreshold;
+      if (completed && !completionSent) {
+        completionSent = true;
+        void progressApi
+          .complete(courseSlug, lesson.id)
+          .then(() => setStatus("ready"))
+          .catch(() => undefined);
+      }
       void progressApi
         .save(courseSlug, lesson.id, pos)
         .then((r) => setStatus(r.completed ? "ready" : (lesson.video?.status ?? "none")))

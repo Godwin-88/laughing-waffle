@@ -4,6 +4,7 @@ import {
   doublePrecision,
   integer,
   jsonb,
+  numeric,
   pgTable,
   smallint,
   text,
@@ -134,6 +135,13 @@ export const lessons = pgTable("lessons", {
   videoDurationSeconds: integer("video_duration_seconds"),
   videoPosterKey: text("video_poster_key"),
   captionsKey: text("captions_key"),
+  // ── Sprint 5 graded quiz config (US-3.2.2) ──────────────────
+  quizTimeLimitMinutes: integer("quiz_time_limit_minutes").notNull().default(0),
+  quizPassPercent: integer("quiz_pass_percent").notNull().default(70),
+  quizMaxAttempts: integer("quiz_max_attempts").notNull().default(0),
+  quizAttemptCooldownMinutes: integer("quiz_attempt_cooldown_minutes").notNull().default(0),
+  quizShuffleQuestions: boolean("quiz_shuffle_questions").notNull().default(true),
+  quizShuffleAnswers: boolean("quiz_shuffle_answers").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -171,7 +179,7 @@ export const enrolments = pgTable(
   (t) => [uniqueIndex("enrolments_user_course_unique").on(t.userId, t.courseId)],
 );
 
-export const progress = pgTable("progress", {
+export const progress = pgTable("lesson_progress", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id")
     .notNull()
@@ -185,6 +193,74 @@ export const progress = pgTable("progress", {
   lastPositionMs: integer("last_position_ms").notNull().default(0),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const quizAttempts = pgTable(
+  "quiz_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    lessonId: uuid("lesson_id")
+      .notNull()
+      .references(() => lessons.id, { onDelete: "cascade" }),
+    attemptNumber: integer("attempt_number").notNull(),
+    status: text("status").notNull().default("in_progress"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    questionsSnapshot: jsonb("questions_snapshot")
+      .$type<GradedQuestionSnapshot[]>()
+      .notNull()
+      .default([]),
+    answers: jsonb("answers")
+      .$type<Array<{ questionId: string; selectedIndex: number }>>()
+      .notNull()
+      .default([]),
+    score: numeric("score", { precision: 6, scale: 2 }).notNull().default("0"),
+    maxScore: numeric("max_score", { precision: 6, scale: 2 }).notNull().default("0"),
+    percent: numeric("percent", { precision: 6, scale: 2 }).notNull().default("0"),
+    passed: boolean("passed").notNull().default(false),
+    autoSubmitted: boolean("auto_submitted").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("quiz_attempts_user_lesson_attempt").on(t.userId, t.lessonId, t.attemptNumber)],
+);
+
+export const gradebook = pgTable(
+  "gradebook",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    lessonId: uuid("lesson_id")
+      .notNull()
+      .references(() => lessons.id, { onDelete: "cascade" }),
+    itemType: text("item_type").notNull().default("quiz"),
+    attemptId: uuid("attempt_id").references(() => quizAttempts.id, { onDelete: "set null" }),
+    score: numeric("score", { precision: 6, scale: 2 }).notNull().default("0"),
+    maxScore: numeric("max_score", { precision: 6, scale: 2 }).notNull().default("0"),
+    percent: numeric("percent", { precision: 6, scale: 2 }).notNull().default("0"),
+    passed: boolean("passed").notNull().default(false),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("gradebook_user_lesson_item").on(t.userId, t.lessonId, t.itemType)],
+);
+
+export interface GradedQuestionSnapshot {
+  id: string;
+  prompt: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+}
 
 export const courseReviews = pgTable("course_reviews", {
   id: uuid("id").primaryKey().defaultRandom(),

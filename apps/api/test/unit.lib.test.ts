@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { isStrongPassword, passwordError, EMAIL_RE, INTEREST_OPTIONS } from "@takwimu/shared";
 import { hashOpaqueToken, issueOpaqueToken, msToSeconds, signAccessToken, verifyAccessToken } from "../src/lib/tokens";
 import { computeProfileStats } from "../src/lib/users";
+import { fisherYates, gradeQuizSnapshot } from "../src/modules/quizzes/service";
 
 describe("password policy (spec US-1.1.1)", () => {
   it("accepts a strong password", () => {
@@ -92,5 +93,49 @@ describe("profile completeness (US-1.2.1)", () => {
   it("exposes the curated interest taxonomy", () => {
     expect(INTEREST_OPTIONS.length).toBeGreaterThanOrEqual(6);
     expect(INTEREST_OPTIONS.map((o) => o.value)).toContain("ai-engineering");
+  });
+});
+describe("graded quiz grading (US-3.2.2)", () => {
+  const snapshot = [
+    { id: "q1", prompt: "P1", options: ["a", "b"], correctIndex: 1, explanation: "E1" },
+    { id: "q2", prompt: "P2", options: ["a", "b", "c"], correctIndex: 0, explanation: "E2" },
+  ];
+
+  it("scores correct answers and persists a pass/fail decision", () => {
+    const result = gradeQuizSnapshot(snapshot, [
+      { questionId: "q1", selectedIndex: 1 },
+      { questionId: "q2", selectedIndex: 0 },
+    ], 70);
+    expect(result.score).toBe(2);
+    expect(result.maxScore).toBe(2);
+    expect(result.percent).toBe(100);
+    expect(result.passed).toBe(true);
+    expect(result.questions.every((q) => q.correct)).toBe(true);
+  });
+
+  it("fails when the score is below the pass threshold", () => {
+    const result = gradeQuizSnapshot(snapshot, [
+      { questionId: "q1", selectedIndex: 0 },
+      { questionId: "q2", selectedIndex: 0 },
+    ], 70);
+    expect(result.score).toBe(1);
+    expect(result.passed).toBe(false);
+    expect(result.questions[0].correct).toBe(false);
+    expect(result.questions[0].correctIndex).toBe(1);
+    expect(result.questions[0].explanation).toBe("E1");
+  });
+
+  it("masks unanswered questions as incorrect with a null selection", () => {
+    const result = gradeQuizSnapshot(snapshot, [], 70);
+    expect(result.score).toBe(0);
+    expect(result.questions[0].selectedIndex).toBeNull();
+  });
+
+  it("shuffles deterministically when given a seeded RNG", () => {
+    const input = [1, 2, 3, 4, 5];
+    const a = fisherYates(input, () => 0.42);
+    const b = fisherYates(input, () => 0.42);
+    expect(a).toEqual(b);
+    expect(a).toHaveLength(input.length);
   });
 });

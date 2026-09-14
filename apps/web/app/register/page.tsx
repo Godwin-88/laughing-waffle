@@ -1,12 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authApi, ApiClientError } from "@/lib/api";
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", password: "", consent: false });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -19,7 +17,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await authApi.register({ ...form, password: form.password, consent: form.consent });
-      router.push("/verify-email");
+      window.location.href = "/verify-email";
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Something went wrong. Please try again.");
     } finally {

@@ -238,6 +238,8 @@ export interface LessonPublic {
   content: string;
   kind: LessonKind;
   quizQuestions: QuizQuestion[];
+  /** Present when the lesson is a graded quiz (`kind === "quiz"`); answers are never exposed. */
+  quizConfig: QuizConfig | null;
   /** Present when `kind === "video"`; manifest is gated on enrolment. */
   video: VideoLessonInfo | null;
 }
@@ -468,4 +470,115 @@ export interface VideoAssetStatus {
   jobState: "queued" | "processing" | "done" | "failed" | null;
   createdAt: string | null;
   updatedAt: string | null;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sprint 5 — graded quizzes (US-3.2.2) & progress engine (US-5.1.1)
+// ─────────────────────────────────────────────────────────────
+
+/** Quiz configuration persisted on the lesson row (US-3.2.2). */
+export interface QuizConfig {
+  /** 0 = no time limit, otherwise one of 15 / 30 / 60 / 90 / 120 minutes. */
+  timeLimitMinutes: number;
+  /** Pass threshold 0–100 (default 70). */
+  passPercent: number;
+  /** 0 = unlimited attempts. */
+  maxAttempts: number;
+  /** Minutes to wait between attempts (0 = none). */
+  attemptCooldownMinutes: number;
+  shuffleQuestions: boolean;
+  shuffleAnswers: boolean;
+}
+
+/** Question as presented to the learner on attempt start — answers masked. */
+export interface GradedQuizQuestion {
+  id: string;
+  prompt: string;
+  options: string[];
+}
+
+export interface QuizAttemptReference {
+  attemptId: string;
+  attemptNumber: number;
+  status: "in_progress" | "submitted" | "expired";
+  score: number;
+  maxScore: number;
+  percent: number;
+  passed: boolean;
+  autoSubmitted: boolean;
+  startedAt: string;
+  expiresAt: string | null;
+  submittedAt: string | null;
+}
+
+/** POST /courses/:slug/lessons/:position/quiz/attempts */
+export interface StartQuizAttemptResponse extends QuizAttemptReference {
+  questions: GradedQuizQuestion[];
+}
+
+/** POST /courses/:slug/lessons/:position/quiz/attempts/:id/submit */
+export interface QuizSubmissionPayload {
+  answers: Array<{ questionId: string; selectedIndex: number }>;
+}
+
+export interface QuizQuestionResult {
+  questionId: string;
+  prompt: string;
+  options: string[];
+  selectedIndex: number | null;
+  correctIndex: number;
+  explanation: string;
+  correct: boolean;
+}
+
+/** Result of a graded quiz attempt, written to the gradebook immediately. */
+export interface QuizAttemptResult extends QuizAttemptReference {
+  gradebook: {
+    itemType: "quiz";
+    score: number;
+    maxScore: number;
+    percent: number;
+    passed: boolean;
+    submittedAt: string;
+  };
+  /** Per-question breakdown with explanations (shown on the results page). */
+  questions: QuizQuestionResult[];
+}
+
+/** GET /courses/:slug/lessons/:position/quiz/status — pre-attempt context. */
+export interface QuizStatusResponse {
+  lessonId: string;
+  courseSlug: string;
+  lessonPosition: number;
+  title: string;
+  config: QuizConfig;
+  questionCount: number;
+  attemptsUsed: number;
+  bestAttempt: QuizAttemptReference | null;
+  latestAttempt: QuizAttemptReference | null;
+  canAttempt: boolean;
+  /** Seconds until the learner may start the next attempt (0 = ready). */
+  cooldownRemainingSeconds: number;
+  maxAttemptsReached: boolean;
+}
+
+// ── Progress engine (US-5.1.1) ────────────────────────────────
+
+export interface TextLessonCompletionSignal {
+  lessonId: string;
+  courseSlug: string;
+  /** "timer" (60 s on page) or "scroll" (reached bottom of the article). */
+  signal: "timer" | "scroll";
+}
+
+/** Server-Sent Event pushed over GET /me/progress/events. */
+export interface ProgressEventMessage {
+  event: "lesson-completed" | "position-saved" | "watch-threshold";
+  courseSlug: string;
+  lessonId: string;
+  completed: boolean;
+  positionMs: number;
+  coursePercent: number;
+  lessonTitle: string;
+  at: string;
 }

@@ -39,6 +39,14 @@ interface LessonSeed {
   content?: string;
   contentFile?: string;
   quiz?: QuizSeed[];
+  quizConfig?: {
+    timeLimitMinutes?: number;
+    passPercent?: number;
+    maxAttempts?: number;
+    attemptCooldownMinutes?: number;
+    shuffleQuestions?: boolean;
+    shuffleAnswers?: boolean;
+  };
 }
 
 interface ModuleSeed {
@@ -79,11 +87,12 @@ async function readJson(file: string): Promise<CourseSeed[]> {
   const raw = await readFile(file, "utf8");
   return JSON.parse(raw) as CourseSeed[];
 }
-async function seedCourses(allCourses: CourseSeed[]) {
+export async function seedCourses(allCourses: CourseSeed[]) {
   const { db } = getDb(loadEnv().DATABASE_URL);
 
   let created = 0;
   let skipped = 0;
+  let upsertedLessons = 0;
 
   for (const course of allCourses) {
     const existing = await db
@@ -91,38 +100,41 @@ async function seedCourses(allCourses: CourseSeed[]) {
       .from(coursesTable)
       .where(eq(coursesTable.slug, course.slug))
       .limit(1);
-    if (existing.length > 0) {
-      skipped++;
-      console.log(`[seed] skip course (exists): ${course.slug}`);
-      continue;
-    }
 
-    const [courseRow] = await db
-      .insert(coursesTable)
-      .values({
-        slug: course.slug,
-        title: course.title,
-        tagline: course.tagline,
-        description: course.description,
-        objectives: course.objectives,
-        instructor: course.instructor,
-        instructorBio: course.instructorBio,
-        durationWeeks: course.durationWeeks,
-        skillLevel: course.skillLevel,
-        category: course.category,
-        languages: course.languages,
-        priceCents: course.priceCents,
-        currency: course.currency,
-        rating: course.rating,
-        ratingCount: course.ratingCount,
-        tags: course.tags,
-        coverImageUrl: course.coverImageUrl,
-        previewVideoUrl: course.previewVideoUrl,
-        certificationLabel: course.certificationLabel,
-        status: "published",
-      })
-      .returning();
-    created++;
+    let courseRow: { id: string };
+    if (existing.length > 0) {
+      courseRow = existing[0];
+      skipped++;
+      console.log(`[seed] sync course (exists): ${course.slug}`);
+    } else {
+      const [row] = await db
+        .insert(coursesTable)
+        .values({
+          slug: course.slug,
+          title: course.title,
+          tagline: course.tagline,
+          description: course.description,
+          objectives: course.objectives,
+          instructor: course.instructor,
+          instructorBio: course.instructorBio,
+          durationWeeks: course.durationWeeks,
+          skillLevel: course.skillLevel,
+          category: course.category,
+          languages: course.languages,
+          priceCents: course.priceCents,
+          currency: course.currency,
+          rating: course.rating,
+          ratingCount: course.ratingCount,
+          tags: course.tags,
+          coverImageUrl: course.coverImageUrl,
+          previewVideoUrl: course.previewVideoUrl,
+          certificationLabel: course.certificationLabel,
+          status: "published",
+        })
+        .returning();
+      courseRow = row;
+      created++;
+    }
 
     let lessonCounter = 0;
     for (const mod of course.modules) {
@@ -137,6 +149,17 @@ async function seedCourses(allCourses: CourseSeed[]) {
           examCoverage: mod.examCoverage ?? null,
           hook: mod.hook,
           objectives: mod.objectives,
+        })
+        .onConflictDoUpdate({
+          target: [modulesTable.courseId, modulesTable.position],
+          set: {
+            title: mod.title,
+            week: mod.week ?? null,
+            hoursEstimate: mod.hoursEstimate ?? null,
+            examCoverage: mod.examCoverage ?? null,
+            hook: mod.hook,
+            objectives: mod.objectives,
+          },
         })
         .returning();
 
@@ -158,30 +181,64 @@ async function seedCourses(allCourses: CourseSeed[]) {
             summary: lesson.summary,
             content,
             kind: lesson.kind,
+            published: true,
+            quizTimeLimitMinutes: lesson.quizConfig?.timeLimitMinutes ?? 0,
+            quizPassPercent: lesson.quizConfig?.passPercent ?? 70,
+            quizMaxAttempts: lesson.quizConfig?.maxAttempts ?? 0,
+            quizAttemptCooldownMinutes: lesson.quizConfig?.attemptCooldownMinutes ?? 0,
+            quizShuffleQuestions: lesson.quizConfig?.shuffleQuestions ?? true,
+            quizShuffleAnswers: lesson.quizConfig?.shuffleAnswers ?? true,
+          })
+          .onConflictDoUpdate({
+            target: [lessonsTable.courseId, lessonsTable.position],
+            set: {
+              moduleId: moduleRow.id,
+              title: lesson.title,
+              summary: lesson.summary,
+              content,
+              kind: lesson.kind,
+              published: true,
+              quizTimeLimitMinutes: lesson.quizConfig?.timeLimitMinutes ?? 0,
+              quizPassPercent: lesson.quizConfig?.passPercent ?? 70,
+              quizMaxAttempts: lesson.quizConfig?.maxAttempts ?? 0,
+              quizAttemptCooldownMinutes: lesson.quizConfig?.attemptCooldownMinutes ?? 0,
+              quizShuffleQuestions: lesson.quizConfig?.shuffleQuestions ?? true,
+              quizShuffleAnswers: lesson.quizConfig?.shuffleAnswers ?? true,
+            },
           })
           .returning();
+        upsertedLessons++;
 
-        for (const quiz of lesson.quiz ?? []) {
-          await db.insert(quizQuestionsTable).values({
-            courseId: courseRow.id,
-            moduleId: moduleRow.id,
-            lessonId: lessonRow.id,
-            position: quiz.position,
-            prompt: quiz.prompt,
-            options: quiz.options,
-            correctIndex: quiz.correctIndex,
-            explanation: quiz.explanation ?? "",
-          });
+        // Quiz questions: delete + re-insert for this lesson so the seed stays
+        // authoritative (attempts store their own snapshot, so this is safe).
+        if (lesson.quiz?.length) {
+          await db.delete(quizQuestionsTable).where(eq(quizQuestionsTable.lessonId, lessonRow.id));
+          for (const quiz of lesson.quiz) {
+            await db.insert(quizQuestionsTable).values({
+              courseId: courseRow.id,
+              moduleId: moduleRow.id,
+              lessonId: lessonRow.id,
+              position: quiz.position,
+              prompt: quiz.prompt,
+              options: quiz.options,
+              correctIndex: quiz.correctIndex,
+              explanation: quiz.explanation ?? "",
+            });
+          }
         }
       }
     }
-    console.log(
-      `[seed] created course: ${course.slug} (${course.modules.length} modules, ${lessonCounter} lessons)`,
-    );
+    if (existing.length === 0) {
+      console.log(
+        `[seed] created course: ${course.slug} (${course.modules.length} modules, ${lessonCounter} lessons)`,
+      );
+    }
   }
 
-  console.log(`\n[seed] courses done — created ${created}, skipped ${skipped}`);
+  console.log(`\n[seed] courses done — created ${created}, synced ${skipped}, lessons upserted ${upsertedLessons}`);
 }
+
+type CourseRow = { id: string };
 
 async function seedDemoUser() {
   const { db } = getDb(loadEnv().DATABASE_URL);
