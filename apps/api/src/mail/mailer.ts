@@ -8,9 +8,17 @@ export interface VerificationEmail {
   verifyUrl: string;
 }
 
+export interface GenericEmail {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+}
+
 export interface Mailer {
   readonly name: string;
   sendVerificationEmail(email: VerificationEmail): Promise<void>;
+  sendEmail(email: GenericEmail): Promise<void>;
 }
 
 let cachedMailer: Mailer | null = null;

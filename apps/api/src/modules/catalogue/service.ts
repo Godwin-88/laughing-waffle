@@ -4,6 +4,7 @@ import type { CatalogueResponse, CourseDetail, CourseSummary, Facet, LessonPubli
 import { loadEnv } from "../../config/env";
 import { getDb } from "../../db/client";
 import { courses, enrolments, lessons, modules, progress, quizQuestions } from "../../db/schema";
+import { buildLessonVideoPayload } from "../video/service";
 
 const DURATION_BANDS: Array<{ value: string; label: string; min: number; max: number | null }> = [
   { value: "1-4", label: "1–4 weeks", min: 1, max: 4 },
@@ -312,6 +313,7 @@ export async function getCourseDetail(
 export async function getLessonByPosition(
   slug: string,
   position: number,
+  userId: string | null,
 ): Promise<LessonPublic | null> {
   const { db } = getDb(loadEnv().DATABASE_URL);
   const courseRows = await db
@@ -361,5 +363,6 @@ export async function getLessonByPosition(
       correctIndex: q.correctIndex,
       explanation: q.explanation,
     }) as QuizQuestion),
+    video: await buildLessonVideoPayload(course.id, lesson, userId),
   };
 }

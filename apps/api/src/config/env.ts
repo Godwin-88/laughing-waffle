@@ -20,6 +20,9 @@ export interface Env {
   SMTP_URL: string | null;
   SMTP_FROM: string;
   STORAGE_DRIVER: "auto" | "b2" | "local";
+  /** "on" starts the FFmpeg transcode worker at boot (US-4.1.2). */
+  TRANSCODE_WORKER: "on" | "off";
+  API_MAX_UPLOAD_BYTES: number;
   B2_ENDPOINT: string | null;
   B2_BUCKET_COURSE_ASSETS: string;
   B2_BUCKET_USER_UPLOADS: string;
@@ -97,6 +100,8 @@ export function loadEnv(): Env {
     SMTP_URL: optional("SMTP_URL"),
     SMTP_FROM: optional("SMTP_FROM") ?? "Takwimu Data School <no-reply@takwimu.school>",
     STORAGE_DRIVER: effectiveDriver,
+    TRANSCODE_WORKER: (optional("TRANSCODE_WORKER") ?? "on") === "off" ? "off" : "on",
+    API_MAX_UPLOAD_BYTES: Math.max(1, Number(optional("API_MAX_UPLOAD_BYTES") ?? 10_000_000_000)),
     B2_ENDPOINT: optional("B2_ENDPOINT"),
     B2_BUCKET_COURSE_ASSETS: optional("B2_BUCKET_COURSE_ASSETS") ?? "lms-course-assets",
     B2_BUCKET_USER_UPLOADS: optional("B2_BUCKET_USER_UPLOADS") ?? "lms-user-uploads",

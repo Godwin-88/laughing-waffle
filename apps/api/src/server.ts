@@ -1,13 +1,20 @@
 import { buildApp } from "./app";
 import { loadEnv } from "./config/env";
 import { closeDb } from "./db/client";
+import { startTranscodeWorker } from "./modules/video/transcode";
 
 async function main() {
   const env = loadEnv();
   const app = await buildApp({ env });
 
+  // US-4.1.2 background FFmpeg transcode worker (poll for queued jobs).
+  const transcodeTimer =
+    env.TRANSCODE_WORKER === "on" ? startTranscodeWorker(5_000) : null;
+  if (transcodeTimer) app.log.info("[transcode] worker started (poll 5s)");
+
   const shutdown = async (signal: string) => {
     app.log.info(`shutting down (${signal})…`);
+    if (transcodeTimer) clearInterval(transcodeTimer);
     try {
       await app.close();
     } finally {

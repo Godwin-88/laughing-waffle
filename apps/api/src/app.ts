@@ -12,6 +12,10 @@ import { registerAuthRoutes } from "./modules/auth/routes";
 import { registerCatalogueRoutes } from "./modules/catalogue/routes";
 import { registerFilesRoutes } from "./modules/files/routes";
 import { registerProfileRoutes } from "./modules/profile/routes";
+import { registerEnrolmentRoutes } from "./modules/enrolments/routes";
+import { registerVideoRoutes } from "./modules/video/routes";
+import { registerMediaRoutes } from "./modules/video/media";
+import { registerBuilderRoutes } from "./modules/builder/routes";
 import { getStorage } from "./storage/storage";
 
 export interface BuildOptions {
@@ -54,6 +58,26 @@ export async function buildApp(opts: BuildOptions = {}) {
   await app.register(multipart, { limits: { fileSize: 6 * 1024 * 1024, files: 1 } });
   await app.register(rateLimit, { max: 120, timeWindow: "1 minute", global: true, skipOnError: true });
 
+  // Raw byte parsers for chunked video-part PUTs (US-4.1.2 local driver).
+  // The browser uploads 5 MB slices with the source MIME type; Fastify has no
+  // parser for those by default, so we buffer them here.
+  const rawTypes = [
+    "application/octet-stream",
+    "video/mp4",
+    "video/webm",
+    "video/quicktime",
+    "video/x-matroska",
+    "video/x-msvideo",
+  ];
+  for (const type of rawTypes) {
+    app.addContentTypeParser(type, (req, payload, done) => {
+      const chunks: Buffer[] = [];
+      payload.on("data", (chunk: Buffer) => chunks.push(chunk));
+      payload.on("end", () => done(null, Buffer.concat(chunks)));
+      payload.on("error", (err) => done(err as Error));
+    });
+  }
+
   await app.register(authPlugin);
 
   // API v1
@@ -72,6 +96,10 @@ export async function buildApp(opts: BuildOptions = {}) {
           registerProfileRoutes(v1);
           registerCatalogueRoutes(v1);
           registerFilesRoutes(v1);
+          registerEnrolmentRoutes(v1);
+          registerVideoRoutes(v1);
+          registerMediaRoutes(v1);
+          registerBuilderRoutes(v1);
         },
         { prefix: "/v1" },
       );

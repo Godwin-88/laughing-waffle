@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   doublePrecision,
   integer,
@@ -75,6 +76,7 @@ export const courses = pgTable(
     objectives: jsonb("objectives").$type<string[]>().notNull().default([]),
     instructor: text("instructor").notNull().default(""),
     instructorBio: text("instructor_bio").notNull().default(""),
+    instructorId: uuid("instructor_id").references(() => users.id),
     durationWeeks: integer("duration_weeks").notNull().default(0),
     skillLevel: text("skill_level").notNull().default("beginner"),
     category: text("category").notNull().default("technology"),
@@ -123,7 +125,15 @@ export const lessons = pgTable("lessons", {
   title: text("title").notNull(),
   summary: text("summary").notNull().default(""),
   content: text("content").notNull().default(""),
+  contentJson: jsonb("content_json").$type<Record<string, unknown>>().notNull().default({}),
+  published: boolean("published").notNull().default(false),
   kind: text("kind").notNull().default("text"),
+  videoStatus: text("video_status").notNull().default("none"),
+  videoSourceKey: text("video_source_key"),
+  hlsPrefix: text("hls_prefix"),
+  videoDurationSeconds: integer("video_duration_seconds"),
+  videoPosterKey: text("video_poster_key"),
+  captionsKey: text("captions_key"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -186,5 +196,57 @@ export const courseReviews = pgTable("course_reviews", {
     .references(() => users.id, { onDelete: "cascade" }),
   rating: smallint("rating").notNull(),
   comment: text("comment").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const videoAssets = pgTable("video_assets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  courseId: uuid("course_id")
+    .notNull()
+    .references(() => courses.id, { onDelete: "cascade" }),
+  lessonId: uuid("lesson_id")
+    .notNull()
+    .references(() => lessons.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  sourceFilename: text("source_filename").notNull(),
+  sourceContentType: text("source_content_type").notNull().default("video/mp4"),
+  sourceSizeBytes: bigint("source_size_bytes", { mode: "number" }).notNull().default(0),
+  sourceKey: text("source_key").notNull(),
+  uploadId: text("upload_id"),
+  parts: jsonb("parts")
+    .$type<Array<{ partNumber: number; etag: string | null; size: number }>>()
+    .notNull()
+    .default([]),
+  uploadedBytes: bigint("uploaded_bytes", { mode: "number" }).notNull().default(0),
+  status: text("status").notNull().default("uploading"),
+  hlsPrefix: text("hls_prefix"),
+  durationSeconds: integer("duration_seconds"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const transcodeJobs = pgTable("transcode_jobs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  assetId: uuid("asset_id")
+    .notNull()
+    .references(() => videoAssets.id, { onDelete: "cascade" }),
+  state: text("state").notNull().default("queued"),
+  attempts: integer("attempts").notNull().default(0),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+});
+
+export const analyticsEvents = pgTable("analytics_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventName: text("event_name").notNull(),
+  userId: uuid("user_id"),
+  courseId: uuid("course_id"),
+  lessonId: uuid("lesson_id"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

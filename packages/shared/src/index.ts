@@ -60,6 +60,13 @@ export type SkillLevel = "beginner" | "intermediate" | "advanced";
 export type UserRole = "learner" | "instructor" | "admin";
 export type CourseStatus = "draft" | "published" | "archived";
 export type LessonKind = "text" | "video" | "notebook" | "lab" | "quiz";
+export type VideoStatus =
+  | "none"
+  | "uploading"
+  | "queued"
+  | "transcoding"
+  | "ready"
+  | "failed";
 
 // ─────────────────────────────────────────────────────────────
 // DTOs
@@ -231,4 +238,234 @@ export interface LessonPublic {
   content: string;
   kind: LessonKind;
   quizQuestions: QuizQuestion[];
+  /** Present when `kind === "video"`; manifest is gated on enrolment. */
+  video: VideoLessonInfo | null;
+}
+
+export interface VideoQualityTier {
+  height: number;
+  width: number;
+  bandwidth: number; // bps advertised in the master playlist
+  playlistPath: string; // relative to the HLS prefix
+}
+
+export interface VideoLessonInfo {
+  status: VideoStatus;
+  durationSeconds: number | null;
+  posterUrl: string | null;
+  captionsUrl: string | null;
+  /** Master HLS playlist URL — only returned to enrolled learners. */
+  hlsManifestUrl: string | null;
+  tiers: VideoQualityTier[];
+  savedPositionMs: number | null;
+  error: string | null;
+  uploadedAt: string | null;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sprint 3 — enrolment & progress (US-2.2.1, US-3.1.1)
+// ─────────────────────────────────────────────────────────────
+
+export interface EnrolNowResponse {
+  enrolmentId: string;
+  alreadyEnrolled: boolean;
+  redirect: { courseSlug: string; lessonPosition: number } | null;
+}
+
+export interface EnrolmentSummary {
+  courseId: string;
+  courseSlug: string;
+  courseTitle: string;
+  courseCoverImageUrl: string | null;
+  courseCategory: string;
+  instructor: string;
+  enrolledAt: string;
+  status: string;
+  pricePaidCents: number;
+  progressPercent: number;
+  firstLessonPosition: number | null;
+  lastLessonPosition: number | null;
+}
+
+export interface EnrolmentContext {
+  enrolled: boolean;
+  progressPercent: number;
+  firstLessonPosition: number | null;
+  lastLessonPosition: number | null;
+  nextLessonPosition: number | null;
+}
+
+export interface LessonProgressRow {
+  lessonId: string;
+  position: number;
+  title: string;
+  completed: boolean;
+  lastPositionMs: number;
+  updatedAt: string | null;
+}
+
+export interface CourseProgressResponse {
+  courseSlug: string;
+  enrolled: boolean;
+  percent: number;
+  completedLessons: number;
+  totalLessons: number;
+  lessons: LessonProgressRow[];
+}
+
+export interface SaveProgressResponse {
+  lessonId: string;
+  courseSlug: string;
+  completed: boolean;
+  positionMs: number;
+  coursePercent: number;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sprint 4 — course builder & video upload (US-4.1.x)
+// ─────────────────────────────────────────────────────────────
+
+export interface BuilderLessonSummary {
+  id: string;
+  moduleId: string | null;
+  position: number;
+  title: string;
+  summary: string;
+  kind: LessonKind;
+  published: boolean;
+  videoStatus: VideoStatus;
+  videoDurationSeconds: number | null;
+  updatedAt: string | null;
+}
+
+export interface BuilderModuleSummary {
+  id: string;
+  courseId: string;
+  position: number;
+  title: string;
+  week: number | null;
+  hoursEstimate: number | null;
+  examCoverage: string | null;
+  hook: string;
+  objectives: string[];
+  lessons: BuilderLessonSummary[];
+}
+
+export interface BuilderCourse {
+  id: string;
+  slug: string;
+  title: string;
+  tagline: string;
+  description: string;
+  objectives: string[];
+  instructor: string;
+  durationWeeks: number;
+  skillLevel: SkillLevel;
+  category: string;
+  priceCents: number;
+  currency: string;
+  certificationLabel: string | null;
+  status: CourseStatus;
+  previewVideoUrl: string | null;
+  modules: BuilderModuleSummary[];
+}
+
+export interface BuilderCourseListEntry {
+  id: string;
+  slug: string;
+  title: string;
+  tagline: string;
+  status: CourseStatus;
+  category: string;
+  priceCents: number;
+  moduleCount: number;
+  lessonCount: number;
+  publishedLessonCount: number;
+  updatedAt: string | null;
+}
+
+export interface CreateCoursePayload {
+  title: string;
+  tagline?: string;
+  category: string;
+  skillLevel: SkillLevel;
+  durationWeeks?: number;
+  priceCents?: number;
+}
+
+export interface UpdateCoursePayload {
+  title?: string;
+  tagline?: string;
+  description?: string;
+  objectives?: string[];
+  category?: string;
+  skillLevel?: SkillLevel;
+  durationWeeks?: number;
+  priceCents?: number;
+  certificationLabel?: string | null;
+  previewVideoUrl?: string | null;
+}
+
+export interface CreateModulePayload {
+  title: string;
+  week?: number | null;
+  hoursEstimate?: number | null;
+  examCoverage?: string | null;
+  hook?: string;
+  objectives?: string[];
+}
+
+export interface UpdateModulePayload {
+  title?: string;
+  week?: number | null;
+  hoursEstimate?: number | null;
+  examCoverage?: string | null;
+  hook?: string;
+  objectives?: string[];
+}
+
+export interface CreateLessonPayload {
+  moduleId?: string | null;
+  title: string;
+  summary?: string;
+  kind?: LessonKind;
+  content?: string;
+  published?: boolean;
+}
+
+export interface UpdateLessonPayload {
+  title?: string;
+  summary?: string;
+  content?: string;
+  contentJson?: Record<string, unknown>;
+  kind?: LessonKind;
+  published?: boolean;
+}
+
+export interface VideoUploadSession {
+  assetId: string;
+  lessonId: string;
+  partSizeBytes: number;
+  partCount: number;
+  driver: "local" | "b2";
+  /** When `driver === "b2"`, PUT part bytes to this URL (presigned UploadPart). */
+  putMethod: "url" | "api";
+  sourceKey: string;
+}
+
+export interface VideoPartUrlResponse {
+  url: string;
+  partNumber: number;
+}
+
+export interface VideoAssetStatus {
+  assetId: string;
+  status: VideoStatus;
+  uploadedBytes: number;
+  sourceSizeBytes: number;
+  durationSeconds: number | null;
+  error: string | null;
+  jobState: "queued" | "processing" | "done" | "failed" | null;
+  createdAt: string | null;
+  updatedAt: string | null;
 }

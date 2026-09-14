@@ -49,7 +49,7 @@ export function registerCatalogueRoutes(app: FastifyInstance) {
     "/courses/:slug/lessons/:position",
     async (req, reply) => {
       const position = Number(req.params.position);
-      const lesson = await getLessonByPosition(req.params.slug, position);
+      const lesson = await getLessonByPosition(req.params.slug, position, req.userId ?? null);
       if (!lesson) throw notFound("Lesson not found.");
       return reply.send({ lesson });
     },

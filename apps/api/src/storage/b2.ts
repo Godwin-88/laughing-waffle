@@ -1,12 +1,24 @@
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
+  UploadPartCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { Env } from "../config/env";
-import type { BucketName, StorageBackend, StoredObject } from "./storage";
+import type {
+  BucketName,
+  MultipartUpload,
+  StorageBackend,
+  StoredObject,
+  StoredRange,
+  UploadPartResult,
+} from "./storage";
 
 /**
  * Backblaze B2 storage driver — S3-compatible, ~75% cheaper than S3,
@@ -14,7 +26,8 @@ import type { BucketName, StorageBackend, StoredObject } from "./storage";
  *
  * Buckets: lms-course-assets (videos/PDFs/SCORM) · lms-user-uploads
  * (assignments/avatars) · lms-public (marketing images). Private buckets
- * are always served through time-limited presigned URLs.
+ * are always served through time-limited presigned URLs; HLS streams are
+ * proxied by the platform media route so the player stays same-origin.
  */
 export function createB2Storage(env: Env): StorageBackend {
   if (!env.B2_KEY_ID || !env.B2_APP_KEY) {
@@ -67,11 +80,95 @@ export function createB2Storage(env: Env): StorageBackend {
         return null;
       }
     },
+    async readObjectRange(key, bucket, start, end): Promise<StoredRange | null> {
+      try {
+        const res = await client.send(
+          new GetObjectCommand({
+            Bucket: buckets[bucket],
+            Key: key,
+            Range: `bytes=${start}-${end}`,
+          }),
+        );
+        if (!res.Body) return null;
+        const data = await res.Body.transformToByteArray();
+        const header = res.ContentRange ?? `bytes ${start}-${end}/*`;
+        const totalMatch = /(\d+)$/.exec(header);
+        const contentRange = res.ContentRange;
+        return {
+          data: Buffer.from(data),
+          contentType: res.ContentType ?? "application/octet-stream",
+          start,
+          end: start + data.length - 1,
+          totalSize: totalMatch ? Number(totalMatch[1]) : start + data.length,
+        };
+      } catch {
+        const size = await this.objectSize(key, bucket);
+        if (size === 0) return null;
+        return this.readObjectRange(key, bucket, start, Math.min(end, size - 1));
+      }
+    },
     async deleteObject(key, bucket) {
       try {
         await client.send(new DeleteObjectCommand({ Bucket: buckets[bucket], Key: key }));
       } catch {
         /* noop */
+      }
+    },
+
+    // ── multipart (US-4.1.2) ─────────────────────────────────
+    async createMultipartUpload(key, bucket, contentType): Promise<MultipartUpload> {
+      const res = await client.send(
+        new CreateMultipartUploadCommand({
+          Bucket: buckets[bucket],
+          Key: key,
+          ContentType: contentType,
+        }),
+      );
+      return { uploadId: res.UploadId ?? "" };
+    },
+    async presignUploadPart(key, bucket, uploadId, partNumber): Promise<string> {
+      return getSignedUrl(
+        client,
+        new UploadPartCommand({
+          Bucket: buckets[bucket],
+          Key: key,
+          UploadId: uploadId,
+          PartNumber: partNumber,
+        }),
+        { expiresIn: 60 * 60 },
+      );
+    },
+    async writePart(_key, _bucket, _uploadId, _partNumber) {
+      // B2 parts are PUT by the browser directly to presigned URLs.
+      throw new Error("writePart is local-driver only");
+    },
+    async completeMultipartUpload(key, bucket, uploadId, parts, _contentType) {
+      await client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket: buckets[bucket],
+          Key: key,
+          UploadId: uploadId,
+          MultipartUpload: {
+            Parts: parts.map((p) => ({ PartNumber: p.partNumber, ETag: p.etag })),
+          },
+        }),
+      );
+    },
+    async abortMultipartUpload(key, bucket, uploadId) {
+      try {
+        await client.send(
+          new AbortMultipartUploadCommand({ Bucket: buckets[bucket], Key: key, UploadId: uploadId }),
+        );
+      } catch {
+        /* noop */
+      }
+    },
+    async objectSize(key, bucket): Promise<number> {
+      try {
+        const res = await client.send(new HeadObjectCommand({ Bucket: buckets[bucket], Key: key }));
+        return res.ContentLength ?? 0;
+      } catch {
+        return 0;
       }
     },
   };
