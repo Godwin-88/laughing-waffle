@@ -42,7 +42,7 @@ Base URL: `http://localhost:4000/api/v1` (configurable via `PUBLIC_API_URL`).
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `POST` | `/enrolments` | bearer | Free enrol by `{courseSlug}`; paid courses rejected until Sprint 6 |
+| `POST` | `/enrolments` | bearer | Free enrol by `{courseSlug}`; paid courses require checkout (Sprint 6) |
 | `GET` | `/enrolments` | bearer | My enrolments + progress summaries (response: `{ items }`) |
 | `GET` | `/courses/:slug/enrolment` | optional | `{enrolled, progressPercent, firstLessonPosition, lastLessonPosition, nextLessonPosition}` |
 
@@ -108,6 +108,32 @@ Rules: time limit in `{0,15,30,60,90,120}` mins with server-side auto-submit of 
 | `DELETE` | `/instructor/lessons/:lessonId` | bearer + owner | Delete lesson |
 
 Ownership rules: only the course `instructorId` (or `admin`) may manage a course, module, lesson or upload.
+
+## Checkout & orders — Sprint 6 (US-2.2.2)
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/checkout/orders` | bearer | Create order for a paid course: `{courseSlug, provider}` → `{order, mode, client}` |
+| `GET` | `/orders` | bearer | My orders + receipts (`{ items }`) |
+| `GET` | `/orders/:orderId` | bearer | Order summary (owner only) |
+| `GET` | `/checkout/orders/:orderId/status` | bearer | Confirmation polling — refreshes pending provider state (M-Pesa STK cadence ~10 s) |
+| `POST` | `/checkout/orders/:orderId/complete` | bearer | **Mock mode only** — simulate a successful capture |
+| `POST` | `/checkout/webhooks/stripe` | signed | Stripe webhook (`payment_intent.succeeded`), HMAC-verified |
+| `POST` | `/checkout/webhooks/mpesa` | — | Daraja STK callback (ResultCode 0 → confirm) |
+| `POST` | `/checkout/webhooks/paypal` | signed | PayPal webhook capture confirmation |
+
+## Certificates — Sprint 6 (US-5.1.2)
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/certificates` | bearer | My certificates (`{ items }`) |
+| `GET` | `/certificates/:certificateId` | bearer | Certificate detail (owner only) |
+| `GET` | `/certificates/:certificateId/download` | bearer | Certificate PDF (application/pdf attachment) |
+| `GET` | `/courses/:slug/certificate` | bearer | Eligibility: `{eligible, percent, quizPercent, quizzesPassed, issued, certificate}` |
+| `POST` | `/courses/:slug/certificate` | bearer | Claim (idempotent issue) → `201 { certificate }` |
+| `GET` | `/verify/:certificateNumber` | — | Public verification payload |
+
+Claim sequence: all lessons completed **and** course quizzes passed (≥ `quizPassRequired`) → eligible; issuing stores a unique `TDS-CERT-…` number, writes the PDF to storage and returns `{downloadUrl, verifyUrl, linkedinUrl}`.
 
 ## Health
 

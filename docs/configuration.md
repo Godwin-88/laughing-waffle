@@ -72,6 +72,12 @@ Google and Microsoft flows are scaffolded in `apps/api/src/modules/auth/sso.ts`:
 3. The web app detects enabled providers from `GET /auth/me` (`sso` field) and renders the provider buttons.
 4. SSO auto-verifies email and creates/links the account (JIT provisioning); role assignment is a Sprint 9 concern.
 
+## Payments & certificates (Sprint 6)
+
+- `PAYMENTS_MODE=mock` is the default: `POST /checkout/orders` still creates a real pending order, and `POST /checkout/orders/:id/complete` simulates the provider capture (`pending → paid` + enrolment upsert). No credentials required.
+- Live mode (`PAYMENTS_MODE=live`) needs provider keys — `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`, `MPESA_*` (Daraja STK: consumer key/secret, passkey, shortcode, callback URL) or `PAYPAL_*` (client id/secret/webhook id). Signed webhooks then drive the same confirm path.
+- Certificates need only storage (local or B2); PDFs are generated server-side with `pdfkit`.
+
 ## Security checklist for production
 
 - `JWT_SECRET` at least 32 random characters, stored in the secret manager, rotated on deploy.

@@ -33,6 +33,18 @@ export interface Env {
   GOOGLE_CLIENT_SECRET: string | null;
   MICROSOFT_CLIENT_ID: string | null;
   MICROSOFT_CLIENT_SECRET: string | null;
+  /** "mock" (default) simulates Stripe/M-Pesa/PayPal locally; "live" requires real credentials. */
+  PAYMENTS_MODE: "mock" | "live";
+  STRIPE_SECRET_KEY: string | null;
+  STRIPE_WEBHOOK_SECRET: string | null;
+  MPESA_CONSUMER_KEY: string | null;
+  MPESA_CONSUMER_SECRET: string | null;
+  MPESA_PASSKEY: string | null;
+  MPESA_SHORTCODE: string | null;
+  MPESA_CALLBACK_URL: string | null;
+  PAYPAL_CLIENT_ID: string | null;
+  PAYPAL_CLIENT_SECRET: string | null;
+  PAYPAL_WEBHOOK_ID: string | null;
 }
 
 const API_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."); // apps/api
@@ -112,6 +124,17 @@ export function loadEnv(): Env {
     GOOGLE_CLIENT_SECRET: optional("GOOGLE_CLIENT_SECRET"),
     MICROSOFT_CLIENT_ID: optional("MICROSOFT_CLIENT_ID"),
     MICROSOFT_CLIENT_SECRET: optional("MICROSOFT_CLIENT_SECRET"),
+    PAYMENTS_MODE: (optional("PAYMENTS_MODE") ?? "mock") === "live" ? "live" : "mock",
+    STRIPE_SECRET_KEY: optional("STRIPE_SECRET_KEY"),
+    STRIPE_WEBHOOK_SECRET: optional("STRIPE_WEBHOOK_SECRET"),
+    MPESA_CONSUMER_KEY: optional("MPESA_CONSUMER_KEY"),
+    MPESA_CONSUMER_SECRET: optional("MPESA_CONSUMER_SECRET"),
+    MPESA_PASSKEY: optional("MPESA_PASSKEY"),
+    MPESA_SHORTCODE: optional("MPESA_SHORTCODE"),
+    MPESA_CALLBACK_URL: optional("MPESA_CALLBACK_URL"),
+    PAYPAL_CLIENT_ID: optional("PAYPAL_CLIENT_ID"),
+    PAYPAL_CLIENT_SECRET: optional("PAYPAL_CLIENT_SECRET"),
+    PAYPAL_WEBHOOK_ID: optional("PAYPAL_WEBHOOK_ID"),
   };
   return cached!;
 }

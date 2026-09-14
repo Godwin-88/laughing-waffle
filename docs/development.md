@@ -100,7 +100,7 @@ Verified live, end-to-end, in local dev:
 | Video stays `queued` | Verify `TRANSCODE_WORKER=on` and that `ffmpeg-static` resolved `ffmpegPath` |
 | Video `failed` | Open the asset status endpoint — probe errors surface the ffmpeg stderr tail |
 | Transcode on a headless server | `ffmpeg-static` bundles a static binary; no system ffmpeg required |
-| Paid course won't enrol | Sprint 6 checkout is not built yet — use a `priceCents: 0` course or set it to zero in the Studio edit |
+| Paid course won't enrol | Buy now → `/checkout/:id`; with `PAYMENTS_MODE=mock` click *Pay (simulated)*. If the "payment did not confirm" error persists, check `orders.status` in the DB (mock completion flips `pending → paid` and upserts the enrolment) |
 
 ## Deployment sketch
 

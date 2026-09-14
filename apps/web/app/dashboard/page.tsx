@@ -111,6 +111,14 @@ export default function DashboardPage() {
           {bioSaved ? <span className="ml-2 text-sm text-green-600">✓ Saved</span> : null}
           <p className="mt-4 text-xs text-ink-400">Bio and interests power personalised course recommendations.</p>
         </section>
+      <nav className="mt-6 flex flex-wrap gap-2">
+          <a href="/orders" className="rounded-full border border-ink-200 px-4 py-1.5 text-xs font-semibold text-ink-600 transition hover:border-brand-400 hover:text-brand-700">
+            🧾 My orders
+          </a>
+          <a href="/certificates" className="rounded-full border border-ink-200 px-4 py-1.5 text-xs font-semibold text-ink-600 transition hover:border-brand-400 hover:text-brand-700">
+            🏅 My certificates
+          </a>
+        </nav>
       </div>
 
       {enrolments.length > 0 ? (

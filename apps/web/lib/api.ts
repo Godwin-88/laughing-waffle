@@ -5,16 +5,24 @@ import type {
   BuilderCourse,
   BuilderCourseListEntry,
   CatalogueResponse,
+  CertificateEligibilityResponse,
+  CertificateSummary,
+  CertificateVerificationResponse,
+  CheckoutOrderResponse,
   CourseDetail,
   CourseFilters,
   CourseProgressResponse,
   CreateCoursePayload,
   CreateLessonPayload,
   CreateModulePayload,
+  CreateOrderPayload,
   EnrolmentContext,
   EnrolmentSummary,
   EnrolNowResponse,
   LessonPublic,
+  OrderListResponse,
+  OrderSummary,
+  PaymentProvider,
   ProgressEventMessage,
   PublicUser,
   QuizAttemptResult,
@@ -363,6 +371,73 @@ export const quizApi = {
     });
   },
 };
+
+/**
+ * Sprint 6 — paid checkout (US-2.2.2). Mock-mode orders complete in-process;
+ * live mode redirects/polls the provider capture flow.
+ */
+export const checkoutApi = {
+  async createOrder(payload: CreateOrderPayload): Promise<CheckoutOrderResponse> {
+    return api("/checkout/orders", { method: "POST", body: JSON.stringify(payload) });
+  },
+  async summary(orderId: string): Promise<{ order: OrderSummary }> {
+    return api(`/orders/${orderId}`);
+  },
+  /** US-2.2.2 confirmation polling — call every ~5s while pending. */
+  async status(orderId: string): Promise<{ order: OrderSummary }> {
+    return api(`/checkout/orders/${orderId}/status`);
+  },
+  /** Mock-mode “simulate successful payment”. Live mode uses provider flows. */
+  async complete(orderId: string): Promise<{ order: OrderSummary; confirmed: boolean }> {
+    return api(`/checkout/orders/${orderId}/complete`, { method: "POST", body: JSON.stringify({}) });
+  },
+  async mine(): Promise<OrderListResponse> {
+    return api("/orders");
+  },
+};
+
+/** Sprint 6 — certificates (US-5.1.2). */
+export const certificateApi = {
+  async eligibility(slug: string): Promise<CertificateEligibilityResponse> {
+    return api(`/courses/${slug}/certificate`);
+  },
+  async claim(slug: string): Promise<{ certificate: CertificateSummary }> {
+    return api(`/courses/${slug}/certificate`, { method: "POST", body: JSON.stringify({}) });
+  },
+  async mine(): Promise<{ items: CertificateSummary[] }> {
+    return api("/certificates");
+  },
+  async verify(certificateNumber: string): Promise<CertificateVerificationResponse> {
+    return api(`/verify/${certificateNumber}`, { skipRefresh: true });
+  },
+  /** Fetch the PDF (auth-gated) and trigger a browser download. */
+  async download(certificateId: string): Promise<void> {
+    const res = await apiRaw(`/certificates/${certificateId}/download`);
+    if (!res.ok) throw new ApiClientError({ error: { code: "download", message: `Download failed (${res.status})` } }, res.status);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `takwimu-certificate-${certificateId.slice(0, 8)}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+};
+
+export function providerLabel(provider: PaymentProvider): string {
+  switch (provider) {
+    case "stripe":
+      return "Card (Stripe)";
+    case "mpesa":
+      return "M-Pesa (Daraja STK)";
+    case "paypal":
+      return "PayPal";
+    default:
+      return "Mock provider";
+  }
+}
 
 /**
  * US-5.1.1 — subscribe to real-time progress events via Server-Sent Events.

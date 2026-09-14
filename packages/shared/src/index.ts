@@ -573,7 +573,7 @@ export interface TextLessonCompletionSignal {
 
 /** Server-Sent Event pushed over GET /me/progress/events. */
 export interface ProgressEventMessage {
-  event: "lesson-completed" | "position-saved" | "watch-threshold";
+  event: "lesson-completed" | "position-saved" | "watch-threshold" | "course-completed" | "certificate-issued";
   courseSlug: string;
   lessonId: string;
   completed: boolean;
@@ -581,4 +581,119 @@ export interface ProgressEventMessage {
   coursePercent: number;
   lessonTitle: string;
   at: string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sprint 6 — paid checkout (US-2.2.2) & certificates (US-5.1.2)
+// ─────────────────────────────────────────────────────────────
+
+export type PaymentProvider = "stripe" | "mpesa" | "paypal" | "mock";
+export type OrderStatus = "pending" | "paid" | "failed" | "refunded";
+
+export interface OrderReceipt {
+  providerFeeCents?: number;
+  paymentMethod?: string;
+  last4?: string;
+  mpesaReceipt?: string;
+  captureId?: string;
+}
+
+/** Receipt line returned to the learner (US-2.2.2 "Receipt stored under Orders"). */
+export interface OrderSummary {
+  id: string;
+  orderNumber: string;
+  courseSlug: string;
+  courseTitle: string;
+  provider: PaymentProvider;
+  amountCents: number;
+  currency: string;
+  status: OrderStatus;
+  failureReason: string | null;
+  receipt: OrderReceipt;
+  paidAt: string | null;
+  createdAt: string;
+}
+
+/** POST /checkout/orders — initialise a checkout for a paid course. */
+export interface CreateOrderPayload {
+  courseSlug: string;
+  provider: PaymentProvider;
+  /** Stripe: token/PaymentMethod id (card details handled by Stripe.js, PCI-DSS). */
+  paymentToken?: string;
+  /** M-Pesa: required. E.164 number, e.g. 254712345678. */
+  phoneNumber?: string;
+}
+
+/**
+ * Provider-specific client payload returned by POST /checkout/orders.
+ * The web client finishes the payment off-platform, then polls
+ * GET /checkout/orders/:id until status moves out of "pending".
+ */
+export interface CheckoutOrderResponse {
+  order: OrderSummary;
+  mode: "mock" | "live";
+  client: {
+    /** Stripe PaymentIntent client_secret (card requires Stripe.js confirm). */
+    clientSecret?: string;
+    /** M-Pesa: Daraja CheckoutRequestID for STK push confirmation polling. */
+    mpesaCheckoutRequestId?: string;
+    /** M-Pesa phone the STK push was sent to (masked). */
+    mpesaPhone?: string;
+    /** PayPal: open this URL in a pop-up/new tab to approve and capture. */
+    paypalApproveUrl?: string;
+  };
+  /** True when the order is already paid (idempotent re-checkout). */
+  paid: boolean;
+}
+
+export interface OrderListResponse {
+  items: OrderSummary[];
+}
+
+export interface PaymentWebhookResult {
+  received: boolean;
+  orderId?: string;
+  status?: OrderStatus;
+}
+
+// ── Certificates (US-5.1.2) ─────────────────────────────────
+
+export interface CertificateSummary {
+  id: string;
+  certificateNumber: string;
+  courseSlug: string;
+  courseTitle: string;
+  instructorName: string;
+  issuedAt: string;
+  /** Download URL (presigned when the storage driver supports it). */
+  downloadUrl: string;
+  /** Public verification URL: platform.com/verify/{certificateNumber}. */
+  verifyUrl: string;
+  /** LinkedIn "Add to Profile" deep link (certification section). */
+  linkedinUrl: string;
+}
+
+export interface CertificateEligibilityResponse {
+  courseSlug: string;
+  enrolled: boolean;
+  requiredLessons: number;
+  completedLessons: number;
+  percent: number;
+  quizPercent: number | null;
+  quizPassRequired: number;
+  quizzesPassed: boolean;
+  eligible: boolean;
+  issued: boolean;
+  certificate: CertificateSummary | null;
+}
+
+/** Public response from GET /verify/:certificateNumber (no auth). */
+export interface CertificateVerificationResponse {
+  valid: boolean;
+  certificateNumber: string;
+  learnerName: string;
+  courseTitle: string;
+  instructorName: string;
+  issuedOn: string;
+  platformName: string;
 }

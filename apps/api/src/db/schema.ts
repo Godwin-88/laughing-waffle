@@ -91,6 +91,7 @@ export const courses = pgTable(
     coverImageUrl: text("cover_image_url"),
     previewVideoUrl: text("preview_video_url"),
     certificationLabel: text("certification_label"),
+    certificatePassPercent: integer("certificate_pass_percent").notNull().default(70),
     searchTsv: text("search_tsv"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -326,3 +327,67 @@ export const analyticsEvents = pgTable("analytics_events", {
   payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─────────────────────────────────────────────────────────────
+// Sprint 6 — paid checkout (US-2.2.2) & certificates (US-5.1.2)
+// ─────────────────────────────────────────────────────────────
+
+export type OrderProvider = "stripe" | "mpesa" | "paypal" | "mock";
+export type OrderStatus = "pending" | "paid" | "failed" | "refunded";
+
+export interface OrderReceipt {
+  /** Provider fee captured at payment (amount in same currency). */
+  providerFeeCents?: number;
+  /** Human-readable payment method label, e.g. "Visa ••4242". */
+  paymentMethod?: string;
+  /** Card/M-Pesa payer identifier captured at payment. */
+  last4?: string;
+  /** M-Pesa receipt number when the Daraja STK push confirmed. */
+  mpesaReceipt?: string;
+  /** PayPal capture id when relevant. */
+  captureId?: string;
+}
+
+export const orders = pgTable(
+  "orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderNumber: text("order_number").notNull().unique(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    provider: text("provider").$type<OrderProvider>().notNull(),
+    providerSessionId: text("provider_session_id"),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("USD"),
+    status: text("status").$type<OrderStatus>().notNull().default("pending"),
+    failureReason: text("failure_reason"),
+    receipt: jsonb("receipt").$type<OrderReceipt>().notNull().default({}),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("orders_order_number_unique").on(t.orderNumber)],
+);
+
+export const certificates = pgTable(
+  "certificates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    certificateNumber: text("certificate_number").notNull().unique(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    instructorName: text("instructor_name").notNull(),
+    fileKey: text("file_key").notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("certificates_user_course_unique").on(t.userId, t.courseId)],
+);

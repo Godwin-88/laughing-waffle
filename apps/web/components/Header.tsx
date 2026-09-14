@@ -12,6 +12,12 @@ export function Header() {
     { href: "/", label: "Home" },
     { href: "/courses", label: "Courses" },
     { href: "/dashboard", label: "My Learning" },
+    ...(user
+      ? [
+          { href: "/orders", label: "Orders" },
+          { href: "/certificates", label: "Certificates" },
+        ]
+      : []),
     ...(user?.role === "instructor" || user?.role === "admin"
       ? [{ href: "/studio", label: "Studio" }]
       : []),

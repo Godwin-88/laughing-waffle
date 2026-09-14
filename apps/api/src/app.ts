@@ -4,6 +4,7 @@ import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import fastify from "fastify";
+import rawBodyPlugin from "fastify-raw-body";
 import type { Env } from "./config/env";
 import { loadEnv } from "./config/env";
 import { registerErrorHandler } from "./lib/errors";
@@ -17,6 +18,8 @@ import { registerVideoRoutes } from "./modules/video/routes";
 import { registerMediaRoutes } from "./modules/video/media";
 import { registerBuilderRoutes } from "./modules/builder/routes";
 import { registerQuizRoutes, registerProgressEventsRoute } from "./modules/quizzes/routes";
+import { registerCheckoutRoutes, registerCheckoutWebhooks } from "./modules/checkout/routes";
+import { registerCertificateRoutes } from "./modules/certificates/routes";
 import { getStorage } from "./storage/storage";
 
 export interface BuildOptions {
@@ -58,6 +61,9 @@ export async function buildApp(opts: BuildOptions = {}) {
   await app.register(cookie);
   await app.register(multipart, { limits: { fileSize: 6 * 1024 * 1024, files: 1 } });
   await app.register(rateLimit, { max: 120, timeWindow: "1 minute", global: true, skipOnError: true });
+
+  // Raw HTTP body capture for signed payment webhooks (Stripe/PayPal).
+  await app.register(rawBodyPlugin, { field: "rawBody", global: true });
 
   // Raw byte parsers for chunked video-part PUTs (US-4.1.2 local driver).
   // The browser uploads 5 MB slices with the source MIME type; Fastify has no
@@ -103,6 +109,9 @@ export async function buildApp(opts: BuildOptions = {}) {
           registerBuilderRoutes(v1);
           registerQuizRoutes(v1);
           registerProgressEventsRoute(v1);
+          registerCheckoutRoutes(v1);
+          registerCheckoutWebhooks(v1);
+          registerCertificateRoutes(v1);
         },
         { prefix: "/v1" },
       );

@@ -5,12 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { CourseDetail } from "@takwimu/shared";
 import { useAuth } from "@/lib/auth-context";
-import { enrolmentApi, formatPrice } from "@/lib/api";
+import { checkoutApi, enrolmentApi, formatPrice } from "@/lib/api";
 
 /**
- * US-2.2.1 — card-level enrolment control. Guests see the price + CTA to sign
- * in; authenticated users enrol in one click and are redirected to the first
- * lesson of the course.
+ * US-2.2.1/US-2.2.2 — card-level enrolment control. Free courses enrol in one
+ * click; paid courses create a checkout order and route the learner to the
+ * Sprint 6 checkout page to pay (mock or live provider).
  */
 export function EnrollCard({ course }: { course: CourseDetail }) {
   const { user, loading } = useAuth();
@@ -45,6 +45,13 @@ export function EnrollCard({ course }: { course: CourseDetail }) {
     setBusy(true);
     setErrorMsg(null);
     try {
+      if (course.priceCents > 0) {
+        // US-2.2.2 — paid course: create the order, then pay on /checkout/:id.
+        const order = await checkoutApi.createOrder({ courseSlug: course.slug, provider: "stripe" });
+        setBusy(false);
+        router.push(`/checkout/${order.order.id}`);
+        return;
+      }
       const res = await enrolmentApi.enrol(course.slug);
       setEnrolled(true);
       setSaved(true);
@@ -83,6 +90,14 @@ export function EnrollCard({ course }: { course: CourseDetail }) {
         {course.certificationLabel ? (
           <p className="mt-2 text-center text-xs text-ink-500">🏅 {course.certificationLabel} included</p>
         ) : null}
+        {percent >= 100 ? (
+          <Link
+            href="/certificates"
+            className="mt-3 block w-full rounded-xl border border-brand-300 bg-brand-50 py-2.5 text-center text-sm font-bold text-brand-700 transition hover:bg-brand-100"
+          >
+            Claim your certificate →
+          </Link>
+        ) : null}
       </aside>
     );
   }
@@ -98,7 +113,19 @@ export function EnrollCard({ course }: { course: CourseDetail }) {
         disabled={busy}
         className="mt-4 block w-full rounded-xl bg-brand-600 py-3 text-center text-sm font-bold text-white transition hover:bg-brand-700 disabled:opacity-60"
       >
-        {loading ? "Checking account…" : busy ? "Enrolling…" : saved ? "Enrolled ✓" : user ? "Enrol for free" : "Sign in to enrol"}
+        {loading
+          ? "Checking account…"
+          : busy
+            ? course.priceCents > 0
+              ? "Preparing checkout…"
+              : "Enrolling…"
+            : saved
+              ? "Enrolled ✓"
+              : user
+                ? course.priceCents > 0
+                  ? `Buy now · ${formatPrice(course.priceCents, course.currency)}`
+                  : "Enrol for free"
+                : "Sign in to enrol"}
       </button>
       {errorMsg ? <p className="mt-2 text-xs text-red-600">{errorMsg}</p> : null}
       <p className="mt-2 flex items-center gap-1 text-xs text-ink-500">

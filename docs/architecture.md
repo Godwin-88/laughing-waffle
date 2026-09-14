@@ -1,6 +1,6 @@
 # Architecture
 
-Scope delivered through **Sprint 5** of the master specification, with diagrams for key flows.
+Scope delivered through **Sprint 6** of the master specification, with diagrams for key flows.
 
 ## Delivered scope
 
@@ -11,6 +11,7 @@ Scope delivered through **Sprint 5** of the master specification, with diagrams 
 | **3 — Enrolment & Video** | Free enrolment, enrolment context, playback-position persistence, HLS lesson player (hls.js), enrolment-gated streaming proxy with Range | US-2.2.1, US-3.1.1 |
 | **4 — Builder & Pipeline** | Instructor Studio (course/module/lesson CRUD + publish, ownership-scoped), chunked 5 MB upload (local/B2), FFmpeg HLS worker (360p/720p/1080p), captions & posters | US-4.1.1, US-4.1.2, US-4.1.3 |
 | **5 — Quizzes & Progress** | Graded end-of-module quizzes (server-side grading, snapshot attempts, time limit + auto-submit, max attempts + cooldown, shuffle, gradebook), progress engine (text auto-complete on scroll/timer, video ≥90% watched, quiz auto-complete on submission, SSE real-time progress stream) | US-3.2.2, US-5.1.1 |
+| **6 — Checkout & Payments** | Paid orders (Stripe / M-Pesa Daraja STK / PayPal adapters plug into one server-side confirm path), mock-mode end-to-end payments, order numbers + receipts (`TDS-…`), confirmation polling, and the certificate programme (eligibility gate = all lessons + passed quizzes → idempotent issue → PDF via pdfkit → public verification + LinkedIn deep link) | US-2.2.2, US-5.1.2 |
 
 ## Runtime map
 
@@ -30,11 +31,13 @@ flowchart LR
         VID["video (upload API)"]
         MEDIA["media (HLS streaming proxy)"]
         BLD["builder — US-4.1.x"]
+        ORD["checkout — US-2.2.2<br/>orders, confirm, webhooks"]
+        CERT["certificates — US-5.1.2<br/>eligibility, issue, verify"]
         AUTH_PLUGIN["auth plugin<br/>(Bearer JWT + DB check)"]
     end
 
     NEXT --> AUTH_PLUGIN
-    NEXT --> AUTH & PROF & CAT & ENR & VID & MEDIA & BLD & QUIZ & SSE
+    NEXT --> AUTH & PROF & CAT & ENR & VID & MEDIA & BLD & QUIZ & SSE & ORD & CERT
 
     AUTH & PROF --> PG[("PostgreSQL 16")]
     CAT --> PG
@@ -43,6 +46,9 @@ flowchart LR
     VID --> PG
     QUIZ --> PG
     MEDIA --> PG
+    ORD --> PG
+    CERT --> PG
+    CERT --> STORE
     VID --> TRANSCODER["FFmpeg worker"]
     TRANSCODER --> STORE["Storage<br/>local | B2"]
     MEDIA --> STORE
@@ -151,6 +157,51 @@ sequenceDiagram
     A->>P: lesson_progress completed=true
     A-->>N: "200 { score, percent, passed, gradebook, per-question results + explanations }"
     A--)N: SSE "lesson-completed { coursePercent }"
+```
+
+## Paid checkout & certificates (US-2.2.2, US-5.1.2)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor L as Learner
+    participant N as Next.js web
+    participant A as Fastify API
+    participant P as PostgreSQL
+    participant PR as Provider (Stripe / M-Pesa / PayPal)
+
+    L->>N: Buy now on course page
+    N->>A: POST /checkout/orders { courseSlug, provider }
+    A->>P: insert orders (pending) + generate orderNumber
+    A->>PR: createPayment (intent / STK push / capture)
+    A-->>N: "200 { order, mode: mock|live, client }"
+    N->>L: /checkout/:orderId (provider selector + amount due)
+
+    alt mock mode (dev default)
+        L->>N: Pay (simulated)
+        N->>A: POST /checkout/orders/:id/complete
+        A->>P: orders → paid + receipt + enrolments upsert
+        A-->>N: "200 { order.status: paid }"
+    else live mode
+        L->>PR: Confirm with provider (Stripe.js / PayPal / STK)
+        PR-->>A: webhook (signed) / STK callback
+        A->>P: orders → paid + receipt + enrolments upsert
+        N->>A: GET /checkout/orders/:id/status (poll, ~5 s)
+        A-->>N: "200 { order.status }"
+    end
+
+    Note over L: 100% lessons + passed quizzes
+    L->>N: Claim certificate
+    N->>A: GET /courses/:slug/certificate (eligibility)
+    A-->>N: "200 { eligible }"
+    N->>A: POST /courses/:slug/certificate (idempotent)
+    A->>P: insert certificates (TDS-CERT-…, unique number)
+    A->>A: buildCertificatePdf (pdfkit) → storage
+    A-->>N: "201 { certificate: { downloadUrl, verifyUrl, linkedinUrl } }"
+    L->>N: Download PDF / share to LinkedIn
+    N->>A: GET /certificates/:id/download (Bearer)
+    A->>A: stream stored PDF
+    A-->>L: application/pdf attachment
 ```
 
 ## Data model
@@ -367,5 +418,5 @@ gantt
     Hardening, observability, launch  :s10, after s9, 7d
 ```
 
-**Done:** Sprints 1–5 · **Next:** Sprint 6 (paid checkout — currently blocks paid enrolment on priced courses), 7–10.
+**Done:** Sprints 1–6 · **Next:** Sprint 7 (assessments & certificates package — deeper assessment types beyond module quizzes).
 ```
