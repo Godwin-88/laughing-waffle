@@ -2,11 +2,28 @@ import type {
   ApiErrorPayload,
   AuthMeResponse,
   AuthTokensResponse,
+  BuilderCourse,
+  BuilderCourseListEntry,
   CatalogueResponse,
   CourseDetail,
   CourseFilters,
+  CourseProgressResponse,
+  CreateCoursePayload,
+  CreateLessonPayload,
+  CreateModulePayload,
+  EnrolmentContext,
+  EnrolmentSummary,
+  EnrolNowResponse,
   LessonPublic,
   PublicUser,
+  SaveProgressResponse,
+  UpdateCoursePayload,
+  UpdateLessonPayload,
+  UpdateModulePayload,
+  VideoAssetStatus,
+  VideoLessonInfo,
+  VideoPartUrlResponse,
+  VideoUploadSession,
 } from "@takwimu/shared";
 
 export const API_BASE =
@@ -193,6 +210,121 @@ export const profileApi = {
     form.append("file", file);
     const res = await api<{ avatarUrl: string }>("/profile/avatar", { method: "POST", body: form });
     return res.avatarUrl;
+  },
+};
+
+/** Raw fetch (no JSON coercion) for chunked video-part uploads (US-4.1.2). */
+async function apiRaw(path: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
+  const res = await fetch(`${API_BASE}/api/v1${path}`, {
+    ...init,
+    headers,
+    credentials: "include",
+  });
+  if (res.status === 401 && !init.credentials) {
+    const refreshed = await tryRefresh();
+    if (refreshed) return apiRaw(path, init);
+  }
+  return res;
+}
+
+export const enrolmentApi = {
+  /** US-2.2.1 — free enrolment. */
+  async enrol(courseSlug: string): Promise<EnrolNowResponse> {
+    return api("/enrolments", { method: "POST", body: JSON.stringify({ courseSlug }) });
+  },
+  async mine(): Promise<EnrolmentSummary[]> {
+    const res = await api<{ items: EnrolmentSummary[] }>("/enrolments");
+    return res.items;
+  },
+  async context(courseSlug: string): Promise<EnrolmentContext> {
+    return api(`/courses/${courseSlug}/enrolment`);
+  },
+};
+
+export const progressApi = {
+  /** US-3.1.1 — persist playback position / completion. */
+  async save(courseSlug: string, lessonId: string, positionMs: number, completed?: boolean): Promise<SaveProgressResponse> {
+    return api("/progress", {
+      method: "PUT",
+      body: JSON.stringify({ courseSlug, lessonId, positionMs, completed }),
+    });
+  },
+  async complete(courseSlug: string, lessonId: string): Promise<SaveProgressResponse> {
+    return api(`/progress/lessons/${lessonId}/complete`, { method: "POST", body: JSON.stringify({}) });
+  },
+  async course(courseSlug: string): Promise<CourseProgressResponse> {
+    return api(`/courses/${courseSlug}/progress`);
+  },
+};
+
+export const builderApi = {
+  async list(): Promise<BuilderCourseListEntry[]> {
+    const res = await api<{ items: BuilderCourseListEntry[] }>("/instructor/courses");
+    return res.items;
+  },
+  async get(slug: string): Promise<BuilderCourse> {
+    return api(`/instructor/courses/${slug}`);
+  },
+  async create(payload: CreateCoursePayload): Promise<BuilderCourseListEntry> {
+    return api("/instructor/courses", { method: "POST", body: JSON.stringify(payload) });
+  },
+  async update(slug: string, payload: UpdateCoursePayload): Promise<BuilderCourse> {
+    return api(`/instructor/courses/${slug}`, { method: "PATCH", body: JSON.stringify(payload) });
+  },
+  async publish(slug: string): Promise<BuilderCourse> {
+    return api(`/instructor/courses/${slug}/publish`, { method: "POST", body: JSON.stringify({}) });
+  },
+  async addModule(slug: string, payload: CreateModulePayload): Promise<BuilderCourse> {
+    return api(`/instructor/courses/${slug}/modules`, { method: "POST", body: JSON.stringify(payload) });
+  },
+  async updateModule(moduleId: string, payload: UpdateModulePayload): Promise<BuilderCourse> {
+    return api(`/instructor/modules/${moduleId}`, { method: "PATCH", body: JSON.stringify(payload) });
+  },
+  async deleteModule(moduleId: string): Promise<void> {
+    await api(`/instructor/modules/${moduleId}`, { method: "DELETE" });
+  },
+  async addLesson(slug: string, payload: CreateLessonPayload): Promise<BuilderCourse> {
+    return api(`/instructor/courses/${slug}/lessons`, { method: "POST", body: JSON.stringify(payload) });
+  },
+  async updateLesson(lessonId: string, payload: UpdateLessonPayload): Promise<BuilderCourse> {
+    return api(`/instructor/lessons/${lessonId}`, { method: "PATCH", body: JSON.stringify(payload) });
+  },
+  async deleteLesson(lessonId: string): Promise<void> {
+    await api(`/instructor/lessons/${lessonId}`, { method: "DELETE" });
+  },
+};
+
+export const videoApi = {
+  /** US-4.1.2 — start a chunked upload session. */
+  async startUpload(lessonId: string, filename: string, contentType: string, sizeBytes: number): Promise<VideoUploadSession> {
+    return api(`/instructor/lessons/${lessonId}/uploads`, {
+      method: "POST",
+      body: JSON.stringify({ filename, contentType, sizeBytes }),
+    });
+  },
+  /** Upload a single part (local driver → API PUT; B2 → presigned URL). */
+  async uploadPart(session: VideoUploadSession, partNumber: number, blob: Blob): Promise<void> {
+    if (session.putMethod === "api") {
+      const url = await api<VideoPartUrlResponse>(`/instructor/videos/${session.assetId}/parts/${partNumber}`);
+      const res = await apiRaw(url.url.replace(`${API_BASE}/api/v1`, ""), {
+        method: "PUT",
+        body: blob,
+        headers: { "content-type": blob.type || "application/octet-stream" },
+      });
+      if (!res.ok) throw new ApiClientError({ error: { code: "part_upload", message: `Part ${partNumber} failed (${res.status})` } }, res.status);
+    } else {
+      const { url } = await api<VideoPartUrlResponse>(`/instructor/videos/${session.assetId}/parts/${partNumber}`);
+      const res = await fetch(url, { method: "PUT", body: blob });
+      if (!res.ok) throw new ApiClientError({ error: { code: "part_upload", message: `Part ${partNumber} failed (${res.status})` } }, res.status);
+    }
+  },
+  async completeUpload(assetId: string): Promise<VideoAssetStatus> {
+    return api(`/instructor/videos/${assetId}/complete`, { method: "POST", body: JSON.stringify({}) });
+  },
+  async status(assetId: string): Promise<VideoAssetStatus> {
+    return api(`/instructor/videos/${assetId}`);
   },
 };
 

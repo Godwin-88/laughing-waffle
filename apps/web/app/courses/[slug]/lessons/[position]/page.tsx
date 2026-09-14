@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { catalogueApi } from "@/lib/api";
 import { MarkdownView } from "@/components/MarkdownView";
 import { QuickCheck } from "@/components/QuickCheck";
+import { VideoPlayer } from "@/components/VideoPlayer";
+import { MarkCompleteButton } from "@/components/MarkCompleteButton";
 
 export const dynamic = "force-dynamic";
 
@@ -52,18 +54,26 @@ export default async function LessonPage({ params }: Props) {
         <p className="mt-2 text-brand-700">{lesson.summary}</p>
         <hr className="mt-4 border-ink-200" />
         <div className="mt-6">
+          {lesson.kind === "video" && lesson.video ? (
+            <div className="mb-8">
+              <VideoPlayer lesson={lesson} courseSlug={slug} />
+            </div>
+          ) : null}
           <MarkdownView lesson={lesson} />
         </div>
         <hr className="mt-8 border-ink-200" />
-        <div className="mt-6 flex justify-between">
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
           <Link href={`/courses/${slug}`} className="rounded-xl border border-ink-200 px-5 py-2.5 text-sm font-semibold text-ink-700 hover:border-brand-400">
             ← Back to syllabus
           </Link>
-          {hasNext ? (
-            <Link href={`/courses/${slug}/lessons/${nextPos}`} className="rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">
-              Next lesson →
-            </Link>
-          ) : null}
+          <div className="flex items-center gap-3">
+            {lesson.kind !== "video" ? <MarkCompleteButton lesson={lesson} courseSlug={slug} /> : null}
+            {hasNext ? (
+              <Link href={`/courses/${slug}/lessons/${nextPos}`} className="rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">
+                Next lesson →
+              </Link>
+            ) : null}
+          </div>
         </div>
       </article>
 

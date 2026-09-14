@@ -27,6 +27,15 @@
 
 body {
   @apply bg-white text-ink-900 antialiased;
+  font-family: "Raleway", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Raleway", ui-sans-serif, system-ui, sans-serif;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
 }
 
 ::selection {

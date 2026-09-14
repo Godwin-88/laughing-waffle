@@ -4,15 +4,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
-const NAV = [
-  { href: "/", label: "Home" },
-  { href: "/courses", label: "Courses" },
-  { href: "/dashboard", label: "My Learning" },
-];
-
 export function Header() {
   const { user, loading, logout } = useAuth();
   const pathname = usePathname();
+
+  const nav = [
+    { href: "/", label: "Home" },
+    { href: "/courses", label: "Courses" },
+    { href: "/dashboard", label: "My Learning" },
+    ...(user?.role === "instructor" || user?.role === "admin"
+      ? [{ href: "/studio", label: "Studio" }]
+      : []),
+  ];
 
   return (
     <header className="sticky top-0 z-40 border-b border-ink-200 bg-white/95 backdrop-blur">
@@ -27,7 +30,7 @@ export function Header() {
         </Link>
 
         <nav className="flex items-center gap-5 text-sm font-medium text-ink-700">
-          {NAV.map((item) => {
+          {nav.map((item) => {
             const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
               <Link

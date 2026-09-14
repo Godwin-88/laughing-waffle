@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { CourseDetail } from "@takwimu/shared";
 import { catalogueApi, formatPrice, skillLabel } from "@/lib/api";
+import { EnrollCard } from "@/components/EnrollCard";
 
 export const dynamic = "force-dynamic";
 
@@ -76,16 +77,7 @@ export default async function CourseDetailPage({ params }: Props) {
           </p>
         </div>
 
-        <aside className="h-fit rounded-2xl border border-ink-200 bg-white p-5">
-          <p className="text-3xl font-extrabold text-brand-700">{formatPrice(course.priceCents, course.currency)}</p>
-          <p className="mt-1 text-sm text-ink-500">One-time · lifetime access · certificates included</p>
-          <Link href="/register" className="mt-4 block w-full rounded-xl bg-brand-600 py-3 text-center text-sm font-bold text-white hover:bg-brand-700">
-            Enrol now
-          </Link>
-          <p className="mt-2 flex items-center gap-1 text-xs text-ink-500">
-            <span className="text-accent-500">★</span> {course.rating.toFixed(1)} · {course.ratingCount} reviews
-          </p>
-        </aside>
+        <EnrollCard course={course} />
       </section>
 
       <section id="syllabus" className="mt-10 scroll-mt-20">
