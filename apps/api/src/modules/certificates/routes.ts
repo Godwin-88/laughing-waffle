@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { notFound } from "../../lib/errors";
+import { notifyCertificateIssued } from "../notifications/service";
 import {
   certificateEligibility,
   downloadCertificatePdf,
@@ -59,6 +60,12 @@ export function registerCertificateRoutes(app: FastifyInstance) {
     { preHandler: [app.authenticate] },
     async (req, reply) => {
       const certificate = await issueCertificate(req.userId, req.params.slug);
+      // US-10.1.1 — "certificate issued" notification (+ email).
+      void notifyCertificateIssued({
+        userId: req.userId,
+        certificateNumber: certificate.certificateNumber,
+        courseTitle: certificate.courseTitle,
+      });
       return reply.status(201).send({ certificate });
     },
   );

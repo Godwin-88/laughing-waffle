@@ -11,6 +11,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 // NOTE: table definitions mirror apps/api/src/db/migrations/0001_init.sql.
@@ -462,4 +463,86 @@ export const dataRequests = pgTable("data_requests", {
   completedAt: timestamp("completed_at", { withTimezone: true }),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─────────────────────────────────────────────────────────────
+// Sprint 8 — Discussions (US-6.1.1) & Notifications (US-10.1.1)
+// Mirrors 0007_discussions_notifications.sql
+// ─────────────────────────────────────────────────────────────
+
+export type DiscussionPostStatus = "visible" | "hidden";
+
+export const discussionPosts = pgTable("discussion_posts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  courseId: uuid("course_id")
+    .notNull()
+    .references(() => courses.id, { onDelete: "cascade" }),
+  lessonId: uuid("lesson_id")
+    .notNull()
+    .references(() => lessons.id, { onDelete: "cascade" }),
+  parentId: uuid("parent_id").references((): AnyPgColumn => discussionPosts.id, { onDelete: "cascade" }),
+  depth: smallint("depth").notNull().default(0),
+  authorId: uuid("author_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  upvoteCount: integer("upvote_count").notNull().default(0),
+  status: text("status").$type<DiscussionPostStatus>().notNull().default("visible"),
+  moderationReason: text("moderation_reason"),
+  moderationBy: uuid("moderation_by").references(() => users.id, { onDelete: "set null" }),
+  moderationAt: timestamp("moderation_at", { withTimezone: true }),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const discussionVotes = pgTable(
+  "discussion_votes",
+  {
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => discussionPosts.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [t.postId, t.userId],
+);
+
+export type NotificationTypeValue =
+  | "discussion_reply"
+  | "assignment_graded"
+  | "course_content_added"
+  | "certificate_issued"
+  | "payment_receipt"
+  | "streak_reminder"
+  | "instructor_announcement";
+
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").$type<NotificationTypeValue>().notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull().default(""),
+  link: text("link"),
+  actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const notificationPreferences = pgTable("notification_preferences", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  discussionReply: boolean("discussion_reply").notNull().default(true),
+  assignmentGraded: boolean("assignment_graded").notNull().default(true),
+  courseContentAdded: boolean("course_content_added").notNull().default(true),
+  certificateIssued: boolean("certificate_issued").notNull().default(true),
+  paymentReceipt: boolean("payment_receipt").notNull().default(true),
+  streakReminder: boolean("streak_reminder").notNull().default(true),
+  instructorAnnouncement: boolean("instructor_announcement").notNull().default(true),
+  marketing: boolean("marketing").notNull().default(true),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

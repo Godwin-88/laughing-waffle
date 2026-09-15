@@ -68,6 +68,8 @@ interface CourseSeed {
   objectives: string[];
   instructor: string;
   instructorBio: string;
+  /** Email of the owning user account (US-6.1.1 moderator + US-10.1.1 announcements). */
+  instructorEmail?: string;
   durationWeeks: number;
   skillLevel: string;
   category: string;
@@ -102,8 +104,22 @@ export async function seedCourses(allCourses: CourseSeed[]) {
       .limit(1);
 
     let courseRow: { id: string };
+    // US-8.1.1 — the instructor account owns the course workspace (moderation,
+    // video upload, announcements). Resolve once per course.
+    let instructorId: string | null = null;
+    if (course.instructorEmail) {
+      const [inst] = await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(eq(usersTable.email, course.instructorEmail))
+        .limit(1);
+      instructorId = inst?.id ?? null;
+    }
     if (existing.length > 0) {
       courseRow = existing[0];
+      if (instructorId) {
+        await db.update(coursesTable).set({ instructorId }).where(eq(coursesTable.id, courseRow.id));
+      }
       skipped++;
       console.log(`[seed] sync course (exists): ${course.slug}`);
     } else {
@@ -130,6 +146,7 @@ export async function seedCourses(allCourses: CourseSeed[]) {
           previewVideoUrl: course.previewVideoUrl,
           certificationLabel: course.certificationLabel,
           status: "published",
+          instructorId: instructorId ?? undefined,
         })
         .returning();
       courseRow = row;
@@ -294,9 +311,41 @@ async function seedAdminUser() {
   console.log(`[seed] admin user: ${email} / Takwimu123`);
 }
 
+async function seedInstructorUsers() {
+  const { db } = getDb(loadEnv().DATABASE_URL);
+  const instructors = [
+    { email: "ina@takwimu.dev", firstName: "Ina", lastName: "Instructor", password: "Instructor123" },
+  ];
+  for (const inst of instructors) {
+    const existing = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.email, inst.email))
+      .limit(1);
+    if (existing.length > 0) {
+      console.log(`[seed] skip instructor (exists): ${inst.email}`);
+      continue;
+    }
+    await db.insert(usersTable).values({
+      email: inst.email,
+      passwordHash: await hashPassword(inst.password),
+      firstName: inst.firstName,
+      lastName: inst.lastName,
+      role: "instructor",
+      emailVerifiedAt: new Date(),
+      consentGivenAt: new Date(),
+      interests: [],
+      experienceLevel: "advanced",
+      wizardStep: 3,
+    });
+    console.log(`[seed] instructor: ${inst.email} / ${inst.password}`);
+  }
+}
+
 async function main() {
   const mainCourses = await readJson(path.join(DATA_DIR, "courses.json"));
   const extraCourses = await readJson(path.join(DATA_DIR, "courses-extra.json"));
+  await seedInstructorUsers();
   await seedCourses([...mainCourses, ...extraCourses]);
   await seedDemoUser();
   await seedAdminUser();

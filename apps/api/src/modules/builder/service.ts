@@ -17,6 +17,7 @@ import { courses, lessons, modules } from "../../db/schema";
 import { forbidden, notFound } from "../../lib/errors";
 import { emitAnalyticsEvent } from "../../lib/events";
 import { slugify } from "../../lib/slug";
+import { notifyCourseContentAdded } from "../notifications/service";
 
 type Role = string;
 
@@ -353,17 +354,28 @@ export async function addLesson(
 ): Promise<BuilderCourse> {
   const course = await ownedCourseBySlug(userId, role, courseSlug);
   if (payload.moduleId) await ownedModule(userId, role, payload.moduleId);
+  const position = await nextLessonPosition(course.id);
   const { db } = getDb(loadEnv().DATABASE_URL);
   await db.insert(lessons).values({
     courseId: course.id,
     moduleId: payload.moduleId ?? null,
-    position: await nextLessonPosition(course.id),
+    position,
     title: payload.title,
     summary: payload.summary ?? "",
     content: payload.content ?? "",
     kind: payload.kind ?? "text",
     published: payload.published ?? false,
   });
+  // US-10.1.1 — "new course content added" notifies every enrolled learner when
+  // the course is already published (drafts wait for publish).
+  if (course.status === "published" && payload.published !== false) {
+    void notifyCourseContentAdded({
+      courseId: course.id,
+      courseSlug: course.slug,
+      lessonTitle: payload.title,
+      lessonPosition: position,
+    });
+  }
   return getBuilderCourse(userId, role, courseSlug);
 }
 

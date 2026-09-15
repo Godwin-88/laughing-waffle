@@ -171,6 +171,36 @@ Enforcement notes: **maintenance mode** → all non-admin requests get `503` (au
 
 Request lifecycle: `pending_confirmation` → (confirm with single-use hashed token, 24 h expiry) → `processing` → `completed` (ZIP or anonymise) | `failed` | `cancelled`. Deletion keeps the user row (PII scrubbed, `status=deleted`, email → `deleted-…@privacy.takwimu.school`) so aggregate statistics survive; the request row is retained 30 days.
 
+## Discussions — Sprint 8 (US-6.1.1)
+
+Access rule: only **enrolled learners**, the **course instructor**, or **admins** may read/post in a lesson's thread (403 otherwise). Replies are capped at depth 2.
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/discussions/lessons/:lessonId` | bearer + enrolled/owner | Thread: `{courseId, lessonId, count, posts[] (nested replies, userVoted), moderator}` |
+| `POST` | `/discussions/lessons/:lessonId/posts` | bearer + enrolled/owner | Create post `{body (≤4000), parentId?}` → `201 DiscussionPost`; reply triggers a `discussion_reply` notification to the parent author |
+| `POST` | `/discussions/posts/:id/vote` | bearer + enrolled/owner | Toggle upvote → `{postId, upvoteCount, voted}` |
+| `PATCH` | `/discussions/posts/:id` | bearer + author | Edit own post `{body}` (marks edited) |
+| `POST` | `/discussions/posts/:id/moderation` | bearer + instructor/admin | `{action: hide\|unhide\|delete, reason?}` — hidden posts stay visible to author + moderators; delete removes the subtree |
+| `GET` | `/discussions/courses/:courseId/search?q=` | bearer + enrolled/owner | Flat ILIKE search across visible top-level posts (min 2 chars) |
+
+## Notifications — Sprint 8 (US-10.1.1)
+
+Types: `discussion_reply`, `assignment_graded`, `course_content_added`, `certificate_issued`, `payment_receipt`, `streak_reminder`, `instructor_announcement` — each independently toggleable (plus a master `marketing` flag).
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/notifications?limit=` | bearer | In-app list (newest first) + unread count |
+| `GET` | `/notifications/unread-count` | bearer | `{unread}` |
+| `POST` | `/notifications/read` | bearer | Mark `{ids}` read (omitting ids marks all) |
+| `POST` | `/notifications/read-all` | bearer | Mark every notification read |
+| `GET` | `/notifications/preferences` | bearer | Current 8 toggles |
+| `PATCH` | `/notifications/preferences` | bearer | Partial toggle patch (strict-validated) |
+| `POST` | `/courses/:slug/announcements` | bearer + instructor/admin | Broadcast `{title, body, link?}` to every enrolled learner |
+| `GET` | `/notifications/unsubscribe?userId=` | — (link in email) | One-click CAN-SPAM unsubscribe: disables all 8 email channels |
+
+Emails embed a per-type unsubscribe link; the in-app bell polls every 60 s and on open.
+
 ## Health
 
 | Method | Path | Auth | Description |

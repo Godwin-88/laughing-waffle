@@ -1,6 +1,6 @@
 # Architecture
 
-Scope delivered through **Sprint 7** of the master specification, with diagrams for key flows.
+Scope delivered through **Sprint 8** of the master specification, with diagrams for key flows.
 
 ## Delivered scope
 
@@ -13,6 +13,7 @@ Scope delivered through **Sprint 7** of the master specification, with diagrams 
 | **5 — Quizzes & Progress** | Graded end-of-module quizzes (server-side grading, snapshot attempts, time limit + auto-submit, max attempts + cooldown, shuffle, gradebook), progress engine (text auto-complete on scroll/timer, video ≥90% watched, quiz auto-complete on submission, SSE real-time progress stream) | US-3.2.2, US-5.1.1 |
 | **6 — Checkout & Payments** | Paid orders (Stripe / M-Pesa Daraja STK / PayPal adapters plug into one server-side confirm path), mock-mode end-to-end payments, order numbers + receipts (`TDS-…`), confirmation polling, and the certificate programme (eligibility gate = all lessons + passed quizzes → idempotent issue → PDF via pdfkit → public verification + LinkedIn deep link) | US-2.2.2, US-5.1.2 |
 | **7 — Admin & GDPR** | Admin panel: user management (search/filter, role & status changes with last-active tracking, bulk suspend, force password reset, CSV export, audit log per action) + platform configuration (branding, email sender, maintenance mode → global 503, payment-gateway toggles enforced at checkout, feature flags e.g. certificates, revision snapshots + rollback, Redis-backed 60s propagation). GDPR (US-7.2.1): self-service export (ZIP: profile, enrolments, progress, quiz attempts, gradebook, orders, certificates, analytics) and delete (PII scrub, `deleted` status, row retained for stats), email-confirmed opaque tokens, admin-on-behalf flows with export-prerequisite | US-7.1.x, US-7.2.1 |
+| **8 — Discussions & Notifications** | Threaded per-lesson course discussion (US-6.1.1): top-level posts + 2-level replies, upvotes with local toggle state, edit-own, instructor/admin moderation (hide/unhide with reason, delete), enrolled/owner-only access, ILIKE search across the course. In-app + email notifications (US-10.1.1): per-type preferences (8 toggles incl. marketing), unread badge + bell dropdown, mark-read/read-all, instructor announcements to enrolled learners, one-click CAN-SPAM unsubscribe link | US-6.1.1, US-10.1.1 |
 
 ## Runtime map
 
@@ -36,11 +37,13 @@ flowchart LR
         CERT["certificates — US-5.1.2<br/>eligibility, issue, verify"]
         ADM["admin — US-7.1.x<br/>users, config, audit"]
         GDPR["gdpr — US-7.2.1<br/>export, delete, confirm"]
+        DISC["discussions — US-6.1.1<br/>threads, votes, moderation"]
+        NOTIF["notifications — US-10.1.1<br/>in-app, prefs, announce, unsubscribe"]
         AUTH_PLUGIN["auth plugin<br/>(Bearer JWT + DB check)"]
     end
 
     NEXT --> AUTH_PLUGIN
-    NEXT --> AUTH & PROF & CAT & ENR & VID & MEDIA & BLD & QUIZ & SSE & ORD & CERT & ADM & GDPR
+    NEXT --> AUTH & PROF & CAT & ENR & VID & MEDIA & BLD & QUIZ & SSE & ORD & CERT & ADM & GDPR & DISC & NOTIF
 
     AUTH & PROF --> PG[("PostgreSQL 16")]
     CAT --> PG
@@ -56,6 +59,9 @@ flowchart LR
     GDPR --> PG
     GDPR --> STORE
     ADM --> REDIS[("Redis 7<br/>config cache, 60s TTL")]
+    DISC --> PG
+    NOTIF --> PG
+    NOTIF --> REDIS
     VID --> TRANSCODER["FFmpeg worker"]
     TRANSCODER --> STORE["Storage<br/>local | B2"]
     MEDIA --> STORE
@@ -222,6 +228,10 @@ erDiagram
     USERS ||--o{ COURSE_REVIEWS : writes
     USERS ||--o{ VIDEO_ASSETS : uploads
     USERS ||--o{ ANALYTICS_EVENTS : emits
+    USERS ||--o{ DISCUSSION_POSTS : authors
+    USERS ||--o{ DISCUSSION_VOTES : casts
+    USERS ||--o{ NOTIFICATIONS : receives
+    USERS ||--o{ NOTIFICATION_PREFS : opts-in
 
     COURSES ||--o{ MODULES : contains
     COURSES ||--o{ LESSONS : contains
@@ -240,6 +250,7 @@ erDiagram
     LESSONS ||--o{ QUIZ_ATTEMPTS : snapshots
     LESSONS ||--o{ GRADEBOOK : grades
     LESSONS ||--o{ VIDEO_ASSETS : "video source(s)"
+    LESSONS ||--o{ DISCUSSION_POSTS : hosts
 
     VIDEO_ASSETS ||--o{ TRANSCODE_JOBS : "queues"
 
@@ -417,6 +428,54 @@ erDiagram
         timestamptz completed_at
         timestamptz expires_at
     }
+    DISCUSSION_POSTS {
+        uuid id PK
+        uuid course_id FK
+        uuid lesson_id FK
+        uuid parent_id FK "self-ref replies"
+        int depth "0 top-level, 1 reply, 2 reply-of-reply"
+        uuid author_id FK "USERS"
+        text body
+        int upvote_count
+        text status "visible|hidden"
+        text moderation_reason
+        boolean edited
+        timestamptz created_at
+    }
+    DISCUSSION_VOTES {
+        uuid id PK
+        uuid post_id FK
+        uuid user_id FK
+        timestamptz created_at
+        text unique_user_post "UK(user_id, post_id)"
+    }
+    NOTIFICATIONS {
+        uuid id PK
+        uuid user_id FK
+        text type "discussion_reply|assignment_graded|course_content_added|certificate_issued|payment_receipt|streak_reminder|instructor_announcement"
+        text title
+        text body
+        text link
+        uuid actor_user_id FK
+        timestamptz read_at
+        timestamptz created_at
+    }
+    NOTIFICATION_PREFS {
+        uuid id PK
+        uuid user_id FK "UK(user_id)"
+        boolean discussion_reply
+        boolean assignment_graded
+        boolean course_content_added
+        boolean certificate_issued
+        boolean payment_receipt
+        boolean streak_reminder
+        boolean instructor_announcement
+        boolean marketing
+        timestamptz updated_at
+    }
+    DISCUSSION_POSTS ||--o{ DISCUSSION_POSTS : "parent/reply"
+    DISCUSSION_POSTS ||--o{ DISCUSSION_VOTES : has
+    NOTIFICATION_PREFS ||--|| USERS : "belongs to"
 ```
 ## Enrolment & progress lifecycle
 
@@ -512,4 +571,56 @@ gantt
     SAML SSO, bulk enrolment, offline :s10, after s9, 7d
 ```
 
-**Done:** Sprints 1–7 · **Next:** Sprint 8 (Discussions US-6.1.1 & Notifications US-10.1.1).
+**Done:** Sprints 1–8 · **Next:** Sprint 9 (LTI 1.3 US-8.1.2 · API US-8.1.1 · Analytics US-9.1.1).
+
+## Discussions & notifications (Sprint 8 — US-6.1.1, US-10.1.1)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor L as Learner
+    actor I as Instructor
+    participant N as Next.js web
+    participant A as Fastify API
+    participant P as PostgreSQL
+    participant E as Email
+
+    Note over L,A: US-6.1.1 threaded discussion on a lesson
+    L->>N: Open lesson, scroll to Course discussion
+    N->>A: GET /discussions/lessons/:lessonId (Bearer)
+    A->>P: access gate (enrolled | course instructor | admin)
+    A->>P: fetch posts + replies + viewer vote state + moderator flag
+    A-->>N: "200 { courseId, lessonId, count, posts[], moderator }"
+    L->>N: Post a question
+    N->>A: POST /discussions/lessons/:id/posts { body }
+    A->>P: insert discussion_posts (depth 0)
+    A-->>N: "201 { DiscussionPost }"
+    I->>N: Reply
+    N->>A: POST /discussions/lessons/:id/posts { body, parentId }
+    A->>P: insert reply (depth 1) + validate parent is in lesson
+    A->>A: createNotification(discussion_reply → post author)
+    A-->>N: "201 { DiscussionPost }"
+    L->>N: Upvote
+    N->>A: POST /discussions/posts/:id/vote
+    A->>P: toggle discussion_votes + upvote_count
+    A-->>N: "200 { voted, upvoteCount }"
+    I->>A: POST /discussions/posts/:id/moderation { hide, reason }
+    A->>P: status → hidden + moderation_reason
+    Note over L: Hidden posts stay visible to author & moderators
+
+    Note over L,A: US-10.1.1 in-app + email notifications
+    I->>A: POST /courses/:slug/announcements { title, body }
+    A->>P: enrolled learners of the course
+    loop per enrolled learner
+        A->>P: insert notification (+ email if opted in)
+    end
+    L->>N: Bell dropdown (60s poll + on-open)
+    N->>A: GET /notifications?limit=20 + /unread-count
+    A-->>N: "200 { items[], unread }"
+    L->>A: POST /notifications/read { ids } | /read-all
+    L->>A: PATCH /notifications/preferences { type: bool }
+    Note over L,A: One-click unsubscribe link in every email
+    L->>E: Click Unsubscribe
+    E->>A: GET /notifications/unsubscribe?userId=...
+    A->>P: all notification types → false
+```

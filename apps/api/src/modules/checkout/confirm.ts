@@ -6,6 +6,7 @@ import { courses, enrolments, orders, users } from "../../db/schema";
 import { emitAnalyticsEvent } from "../../lib/events";
 import { getMailer } from "../../mail/mailer";
 import { formatMoney } from "../../lib/orders";
+import { notifyPaymentReceipt } from "../notifications/service";
 import type { OrderSummaryRow } from "./service";
 import { getPaymentProvider } from "./providers";
 
@@ -127,6 +128,14 @@ export async function confirmOrderPayment(
   } catch (err) {
     console.warn("[checkout] receipt email failed:", err);
   }
+
+  // US-10.1.1 — "payment receipt" in-app notification (+ email).
+  void notifyPaymentReceipt({
+    userId: row.order.userId,
+    orderNumber: row.order.orderNumber,
+    courseTitle: row.courseTitle,
+    amountText: formatMoney(row.order.amountCents, row.order.currency),
+  });
 
   return { order: { ...row, order: { ...row.order, status: "paid", paidAt: new Date(), receipt: mergedReceipt } }, confirmed: true, alreadyPaid: false };
 }

@@ -2,6 +2,7 @@ import type {
   AdminUserListResponse,
   AdminUserRow,
   ApiErrorPayload,
+  AppNotification,
   AuditLogListResponse,
   AuthMeResponse,
   AuthTokensResponse,
@@ -17,16 +18,24 @@ import type {
   CourseFilters,
   CourseProgressResponse,
   CreateCoursePayload,
+  CreateDiscussionPostPayload,
   CreateLessonPayload,
   CreateModulePayload,
   CreateOrderPayload,
   DataRequestListResponse,
+  DiscussionPost,
+  DiscussionSearchResponse,
+  DiscussionThreadResponse,
   EnrolmentContext,
   EnrolmentSummary,
   EnrolNowResponse,
   GdprActionResponse,
   GdprConfirmResponse,
   LessonPublic,
+  ModerateDiscussionPostPayload,
+  NotificationListResponse,
+  NotificationPreferences,
+  NotificationType,
   OrderListResponse,
   OrderSummary,
   PaymentGateway,
@@ -38,6 +47,7 @@ import type {
   QuizStatusResponse,
   SaveProgressResponse,
   StartQuizAttemptResponse,
+  UnreadCountResponse,
   UpdateCoursePayload,
   UpdateLessonPayload,
   UpdateModulePayload,
@@ -629,3 +639,64 @@ export interface AdminOverview {
   pendingGdpr: number;
   certificatesIssued: number;
 }
+
+// ── US-6.1.1 — Course discussions ─────────────────────────────
+
+export const discussionApi = {
+  async thread(lessonId: string): Promise<DiscussionThreadResponse> {
+    return api(`/discussions/lessons/${lessonId}`);
+  },
+  async createPost(lessonId: string, body: string, parentId?: string): Promise<DiscussionPost> {
+    return api(`/discussions/lessons/${lessonId}/posts`, {
+      method: "POST",
+      body: JSON.stringify({ body, parentId }),
+    });
+  },
+  async vote(postId: string): Promise<{ postId: string; upvoteCount: number; voted: boolean }> {
+    return api(`/discussions/posts/${postId}/vote`, { method: "POST", body: JSON.stringify({}) });
+  },
+  async editPost(postId: string, body: string): Promise<DiscussionPost> {
+    return api(`/discussions/posts/${postId}`, { method: "PATCH", body: JSON.stringify({ body }) });
+  },
+  async moderate(postId: string, action: "hide" | "unhide" | "delete", reason?: string): Promise<{ ok: true; action: string }> {
+    return api(`/discussions/posts/${postId}/moderation`, {
+      method: "POST",
+      body: JSON.stringify({ action, reason }),
+    });
+  },
+  async search(courseId: string, q: string): Promise<DiscussionSearchResponse> {
+    return api(`/discussions/courses/${courseId}/search?q=${encodeURIComponent(q)}`);
+  },
+};
+
+// ── US-10.1.1 — In-app notifications & preferences ────────────
+
+export const notificationsApi = {
+  async list(limit = 20): Promise<NotificationListResponse> {
+    return api(`/notifications?limit=${limit}`);
+  },
+  async unreadCount(): Promise<UnreadCountResponse> {
+    return api("/notifications/unread-count");
+  },
+  async markRead(ids?: string[]): Promise<UnreadCountResponse> {
+    return api("/notifications/read", { method: "POST", body: JSON.stringify({ ids }) });
+  },
+  async markAllRead(): Promise<UnreadCountResponse> {
+    return api("/notifications/read-all", { method: "POST", body: JSON.stringify({}) });
+  },
+  async preferences(): Promise<{ preferences: NotificationPreferences }> {
+    return api("/notifications/preferences");
+  },
+  async updatePreferences(patch: Partial<NotificationPreferences>): Promise<{ preferences: NotificationPreferences }> {
+    return api("/notifications/preferences", { method: "PATCH", body: JSON.stringify(patch) });
+  },
+  async unsubscribe(userId: string): Promise<{ unsubscribed: boolean }> {
+    return api(`/notifications/unsubscribe?userId=${encodeURIComponent(userId)}`, { skipRefresh: true });
+  },
+  async announcement(
+    slug: string,
+    payload: { title: string; body: string; link?: string; type?: NotificationType },
+  ): Promise<{ sent: number }> {
+    return api(`/courses/${slug}/announcements`, { method: "POST", body: JSON.stringify(payload) });
+  },
+};

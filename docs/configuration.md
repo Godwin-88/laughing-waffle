@@ -85,6 +85,13 @@ Google and Microsoft flows are scaffolded in `apps/api/src/modules/auth/sso.ts`:
 - **Maintenance mode** blocks every non-admin request with `503` (auth + `/health` stay reachable so an admin can log in and disable it).
 - **GDPR** needs no extra config: exports are written through the same storage driver under `gdpr-exports/` (local `uploads/` or B2); confirmation/deletion emails go through the configured mailer. The demo admin account is `admin@takwimu.school` / `Takwimu123`.
 
+## Discussions & notifications (Sprint 8)
+
+- No extra env vars. The discussion module requires only Bearer auth; access is derived from `ENROLMENTS` + the course `instructor_id` (all seeded courses now own an instructor account — `ina@takwimu.dev` / `Instructor123`).
+- Notifications ride the same mailer as auth/GDPR (console transport in dev prints the per-type unsubscribe link so you can test one-click unsubscribe without SMTP).
+- The in-app bell polls `GET /notifications` every 60 s and on open; unread counts are real-time within that window.
+- Feature flag `features.discussions` (admin → Settings → Features) disables the discussion UI + endpoints; it is `true` by default in `defaultConfig()`.
+
 ## Security checklist for production
 
 - `JWT_SECRET` at least 32 random characters, stored in the secret manager, rotated on deploy.

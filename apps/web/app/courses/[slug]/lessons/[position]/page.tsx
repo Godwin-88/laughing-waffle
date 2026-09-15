@@ -8,6 +8,7 @@ import { VideoPlayer } from "@/components/VideoPlayer";
 import { MarkCompleteButton } from "@/components/MarkCompleteButton";
 import { GradedQuiz } from "@/components/GradedQuiz";
 import { TextLessonCompletion } from "@/components/TextLessonCompletion";
+import { DiscussionBoard } from "@/components/DiscussionBoard";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +91,11 @@ export default async function LessonPage({ params }: Props) {
       </article>
 
       {lesson.kind !== "quiz" ? <QuickCheck questions={lesson.quizQuestions} /> : null}
+
+      {lesson.kind !== "quiz" ? (
+        /* US-6.1.1 — threaded course discussion pinned beneath the lesson content. */
+        <DiscussionBoard lessonId={lesson.id} courseSlug={slug} lessonPosition={lesson.position} />
+      ) : null}
     </div>
   );
 }

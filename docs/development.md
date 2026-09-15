@@ -105,6 +105,10 @@ Verified live, end-to-end, in local dev:
 | Maintenance banner everywhere | The platform config still has `maintenance.enabled=true` — open `/admin/settings` (admins bypass the 503) and disable it, or restore a previous revision |
 | GDPR delete fails (503) | The export/delete worker surfaced a processing error — check `data_requests.error` in the DB; the most common cause is a DB CHECK-constraint violation (e.g. `users_status_check`), fixed by migration 0006 |
 | GDPR ZIP download 404 | Only the owning learner (or an admin) may download; requests older than their `expires_at` are invalid |
+| Discussion says 403 | You must be enrolled in the course (or be its instructor / admin). Seed demo learner is enrolled in the AWS track |
+| No in-app notifications | Preferences may be all-off, or the type is disabled — check `GET /notifications/preferences` and the bell dropdown's Mark-all path |
+| Reply notification missing | Replies notify the post author only if their `discussionReply` preference is on; the one-click unsubscribe link sets *all* types false (re-enable in Settings → Notifications) |
+| Instructor can't moderate | The course must have `instructor_id` set — `npm run db:seed` now links every seeded course to `ina@takwimu.dev` |
 
 ## Deployment sketch
 

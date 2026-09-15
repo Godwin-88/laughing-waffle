@@ -827,3 +827,115 @@ export interface GdprConfirmResponse {
   /** Present when an admin triggered the request on behalf of a learner. */
   administeredFor?: string | null;
 }
+// ─────────────────────────────────────────────────────────────
+// Sprint 8 — Course discussions (US-6.1.1) & Notifications (US-10.1.1)
+// ─────────────────────────────────────────────────────────────
+
+export type NotificationType =
+  | "discussion_reply"
+  | "assignment_graded"
+  | "course_content_added"
+  | "certificate_issued"
+  | "payment_receipt"
+  | "streak_reminder"
+  | "instructor_announcement";
+
+export interface DiscussionAuthor {
+  id: string;
+  name: string;
+  role: UserRole;
+  /** US-6.1.1 — instructor posts visually distinguished (badge/colour). */
+  instructorBadge: boolean;
+}
+
+export interface DiscussionPost {
+  id: string;
+  courseId: string;
+  lessonId: string;
+  parentId: string | null;
+  depth: number;
+  author: DiscussionAuthor;
+  body: string;
+  upvoteCount: number;
+  userVoted: boolean;
+  /** Hidden posts are only visible to the author, moderators and admins. */
+  status: "visible" | "hidden";
+  moderationReason: string | null;
+  edited: boolean;
+  createdAt: string;
+  replies: DiscussionPost[];
+}
+
+export interface DiscussionThreadResponse {
+  courseId: string;
+  lessonId: string;
+  count: number;
+  posts: DiscussionPost[];
+  /** Whether the viewer is the course instructor or an admin (can moderate). */
+  moderator: boolean;
+}
+
+export interface CreateDiscussionPostPayload {
+  body: string;
+  parentId?: string;
+}
+
+/** Search results are flat (top-level matching posts carry their direct replies). */
+export interface DiscussionSearchResponse {
+  courseId: string;
+  count: number;
+  posts: DiscussionPost[];
+}
+
+export type DiscussionModerationAction = "hide" | "unhide" | "delete";
+
+export interface ModerateDiscussionPostPayload {
+  action: DiscussionModerationAction;
+  reason?: string;
+}
+
+export interface NotificationPreferences {
+  discussionReply: boolean;
+  assignmentGraded: boolean;
+  courseContentAdded: boolean;
+  certificateIssued: boolean;
+  paymentReceipt: boolean;
+  streakReminder: boolean;
+  instructorAnnouncement: boolean;
+  marketing: boolean;
+}
+
+export interface AppNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  link: string | null;
+  actorName: string | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface NotificationListResponse {
+  items: AppNotification[];
+  unread: number;
+}
+
+export interface UnreadCountResponse {
+  unread: number;
+}
+
+export interface MarkNotificationsReadPayload {
+  /** When omitted, marks every notification as read. */
+  ids?: string[];
+}
+
+export interface AnnouncementPayload {
+  title: string;
+  body: string;
+  link?: string;
+}
+
+export interface AnnouncementResult {
+  sent: number;
+}

@@ -9,6 +9,7 @@ import { getDb } from "../../db/client";
 import { users } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import { getQuizStatus, startQuizAttempt, submitQuizAttempt } from "./service";
+import { notifyQuizGraded } from "../notifications/service";
 
 async function authenticateSse(req: FastifyRequest): Promise<string> {
   const header = req.headers.authorization;
@@ -67,6 +68,14 @@ export function registerQuizRoutes(app: FastifyInstance) {
         req.params.attemptId,
         body.answers,
       );
+      // US-10.1.1 — "assignment graded" notification after the gradebook write.
+      void notifyQuizGraded({
+        userId: req.userId,
+        courseSlug: req.params.slug,
+        lessonPosition: Number(req.params.position),
+        percent: result.gradebook.percent,
+        passed: result.gradebook.passed,
+      });
       return reply.send(result);
     },
   );

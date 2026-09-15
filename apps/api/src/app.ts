@@ -22,6 +22,8 @@ import { registerCheckoutRoutes, registerCheckoutWebhooks } from "./modules/chec
 import { registerCertificateRoutes } from "./modules/certificates/routes";
 import { registerGdprRoutes } from "./modules/gdpr/routes";
 import { registerAdminRoutes } from "./modules/admin/routes";
+import { registerDiscussionRoutes } from "./modules/discussions/routes";
+import { registerNotificationRoutes, registerNotificationPreferencesRoute } from "./modules/notifications/routes";
 import { installMaintenanceGuard } from "./modules/admin/guard";
 import { getStorage } from "./storage/storage";
 
@@ -119,6 +121,11 @@ export async function buildApp(opts: BuildOptions = {}) {
           registerCertificateRoutes(v1);
           registerGdprRoutes(v1);
           registerAdminRoutes(v1);
+          registerDiscussionRoutes(v1);
+          registerNotificationRoutes(v1);
+          // US-10.1.1 one-click unsubscribe (CAN-SPAM / GDPR Art. 21) — the
+          // web UI deep-links here as `/settings/notifications?unsubscribe=1`.
+          registerNotificationPreferencesRoute(v1);
         },
         { prefix: "/v1" },
       );

@@ -14,6 +14,7 @@ import {
   type AuthSuccess,
   type SessionMeta,
 } from "./service";
+import { maybeSendStreakReminder } from "../notifications/service";
 import { findOrCreateSsoUser, ssoAuthorizationUrl, ssoExchangeCode, type SsoProvider } from "./sso";
 
 const registerSchema = z.object({
@@ -84,6 +85,8 @@ export function registerAuthRoutes(app: FastifyInstance) {
   app.post("/auth/login", async (req, reply) => {
     const body = loginSchema.parse(req.body);
     const session = await loginService(body.email, body.password, sessionMeta(req));
+    // US-10.1.1 — "streak reminder" (throttled to once/day) after a fresh sign-in.
+    void maybeSendStreakReminder(session.user.id);
     return sendSession(reply, session);
   });
 

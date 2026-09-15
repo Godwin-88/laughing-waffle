@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { NotificationBell } from "@/components/NotificationBell";
 
 export function Header() {
   const { user, loading, logout } = useAuth();
@@ -54,6 +55,7 @@ export function Header() {
             <span className="text-sm text-ink-400">…</span>
           ) : user ? (
             <div className="flex items-center gap-3">
+              <NotificationBell />
               <span className="hidden rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold text-brand-700 sm:inline-flex">
                 {user.profileCompleteness}%
               </span>

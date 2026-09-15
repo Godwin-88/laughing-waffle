@@ -14,9 +14,12 @@ import {
   certificates,
   courses,
   dataRequests,
+  discussionPosts,
   enrolments,
   gradebook,
   lessons,
+  notificationPreferences,
+  notifications,
   orders,
   progress,
   quizAttempts,
@@ -351,7 +354,7 @@ async function sendCompletionEmail(userId: string, type: DataRequestType): Promi
 async function buildAndStoreExport(userId: string, requestId: string): Promise<string> {
   const { db } = getDb(loadEnv().DATABASE_URL);
 
-  const [profileRows, enrolmentRows, progressRows, attemptRows, gradeRows, orderRows, certRows, analyticsRows] =
+  const [profileRows, enrolmentRows, progressRows, attemptRows, gradeRows, orderRows, certRows, analyticsRows, discussionRows, notificationRows, preferenceRows] =
     await Promise.all([
       db.select().from(users).where(eq(users.id, userId)).limit(1),
       db
@@ -395,6 +398,24 @@ async function buildAndStoreExport(userId: string, requestId: string): Promise<s
       db.select().from(orders).where(eq(orders.userId, userId)),
       db.select().from(certificates).where(eq(certificates.userId, userId)),
       db.select().from(analyticsEvents).where(eq(analyticsEvents.userId, userId)),
+      // US-6.1.1 — the learner's forum activity (Sprint 8 fills this section).
+      db
+        .select({
+          id: discussionPosts.id,
+          courseId: discussionPosts.courseId,
+          lessonId: discussionPosts.lessonId,
+          parentId: discussionPosts.parentId,
+          depth: discussionPosts.depth,
+          body: discussionPosts.body,
+          upvoteCount: discussionPosts.upvoteCount,
+          status: discussionPosts.status,
+          createdAt: discussionPosts.createdAt,
+        })
+        .from(discussionPosts)
+        .where(eq(discussionPosts.authorId, userId)),
+      // US-10.1.1 — in-app notifications addressed to the learner.
+      db.select().from(notifications).where(eq(notifications.userId, userId)),
+      db.select().from(notificationPreferences).where(eq(notificationPreferences.userId, userId)),
     ]);
 
   const profile = profileRows[0];
@@ -409,7 +430,9 @@ async function buildAndStoreExport(userId: string, requestId: string): Promise<s
     { path: "orders.json", data: JSON.stringify(orderRows, null, 2) },
     { path: "certificates.json", data: JSON.stringify(certRows, null, 2) },
     { path: "analytics_events.json", data: JSON.stringify(analyticsRows, null, 2) },
-    { path: "forum_posts.json", data: JSON.stringify([], null, 2) }, // Sprint 8 (US-6.1.1) fills this section
+    { path: "forum_posts.json", data: JSON.stringify(discussionRows, null, 2) }, // US-6.1.1
+    { path: "notifications.json", data: JSON.stringify(notificationRows, null, 2) }, // US-10.1.1
+    { path: "notification_preferences.json", data: JSON.stringify(preferenceRows, null, 2) }, // US-10.1.1
   ];
 
   // Certificate PDFs the learner earned (US-5.1.2 artefacts).

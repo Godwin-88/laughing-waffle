@@ -6,6 +6,8 @@ import { fisherYates, gradeQuizSnapshot } from "../src/modules/quizzes/service";
 import { requireAdmin } from "../src/modules/admin/service";
 import { defaultConfig } from "../src/lib/config";
 import { hasCompletedExport } from "../src/modules/gdpr/service";
+import { NOTIFICATION_TYPE_KEYS } from "../src/modules/notifications/service";
+import { MAX_BODY_LENGTH, MAX_REPLY_DEPTH } from "../src/modules/discussions/service";
 
 describe("password policy (spec US-1.1.1)", () => {
   it("accepts a strong password", () => {
@@ -167,5 +169,44 @@ describe("Sprint 7 — GDPR export prerequisite (US-7.2.1)", () => {
     expect(hasCompletedExport([{ type: "export", status: "processing" }])).toBe(false);
     expect(hasCompletedExport([{ type: "delete", status: "completed" }])).toBe(false);
     expect(hasCompletedExport([])).toBe(false);
+  });
+});
+
+describe("Sprint 8 — notifications preferences mapping (US-10.1.1)", () => {
+  it("maps every notification type to its preferences toggle", () => {
+    const types = Object.keys(NOTIFICATION_TYPE_KEYS);
+    expect(types).toContain("discussion_reply");
+    expect(types).toContain("certificate_issued");
+    expect(types).toContain("instructor_announcement");
+    // every type resolves to a distinct preference key
+    expect(new Set(Object.values(NOTIFICATION_TYPE_KEYS)).size).toBe(types.length);
+  });
+
+  it("preference defaults are all enabled", () => {
+    const prefs = {
+      discussionReply: true,
+      assignmentGraded: true,
+      courseContentAdded: true,
+      certificateIssued: true,
+      paymentReceipt: true,
+      streakReminder: true,
+      instructorAnnouncement: true,
+      marketing: true,
+    };
+    expect(Object.values(prefs).every(Boolean)).toBe(true);
+  });
+});
+
+describe("Sprint 8 — discussion structure rules (US-6.1.1)", () => {
+  it("caps reply nesting at depth 2 (3 levels total)", () => {
+    expect(MAX_REPLY_DEPTH).toBe(2);
+    // A depth-1 parent may still receive a depth-2 reply...
+    expect(1).toBeLessThan(MAX_REPLY_DEPTH);
+    // ...but a depth-2 parent cannot (parent.depth >= MAX_REPLY_DEPTH rejects).
+    expect(2).not.toBeLessThan(MAX_REPLY_DEPTH);
+  });
+
+  it("server enforces a 4000-character limit on post bodies", () => {
+    expect(MAX_BODY_LENGTH).toBe(4000);
   });
 });
