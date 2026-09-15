@@ -118,6 +118,9 @@ export default function DashboardPage() {
           <a href="/certificates" className="rounded-full border border-ink-200 px-4 py-1.5 text-xs font-semibold text-ink-600 transition hover:border-brand-400 hover:text-brand-700">
             🏅 My certificates
           </a>
+          <a href="/settings/privacy" className="rounded-full border border-ink-200 px-4 py-1.5 text-xs font-semibold text-ink-600 transition hover:border-brand-400 hover:text-brand-700">
+            🔒 Privacy &amp; data
+          </a>
         </nav>
       </div>
 

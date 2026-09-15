@@ -20,6 +20,9 @@ import { registerBuilderRoutes } from "./modules/builder/routes";
 import { registerQuizRoutes, registerProgressEventsRoute } from "./modules/quizzes/routes";
 import { registerCheckoutRoutes, registerCheckoutWebhooks } from "./modules/checkout/routes";
 import { registerCertificateRoutes } from "./modules/certificates/routes";
+import { registerGdprRoutes } from "./modules/gdpr/routes";
+import { registerAdminRoutes } from "./modules/admin/routes";
+import { installMaintenanceGuard } from "./modules/admin/guard";
 import { getStorage } from "./storage/storage";
 
 export interface BuildOptions {
@@ -90,6 +93,8 @@ export async function buildApp(opts: BuildOptions = {}) {
   // API v1
   await app.register(
     async (api) => {
+      // US-7.1.2 maintenance mode — global 503 for non-admins while enabled.
+      installMaintenanceGuard(api);
       await api.register(
         async (v1) => {
           v1.get("/health", async () => ({
@@ -112,6 +117,8 @@ export async function buildApp(opts: BuildOptions = {}) {
           registerCheckoutRoutes(v1);
           registerCheckoutWebhooks(v1);
           registerCertificateRoutes(v1);
+          registerGdprRoutes(v1);
+          registerAdminRoutes(v1);
         },
         { prefix: "/v1" },
       );

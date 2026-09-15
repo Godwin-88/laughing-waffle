@@ -3,7 +3,7 @@ import { EMAIL_RE, isStrongPassword, passwordError } from "@takwimu/shared";
 import type { CourseSummary, PublicUser } from "@takwimu/shared";
 import { loadEnv } from "../../config/env";
 import { getDb } from "../../db/client";
-import { emailVerificationTokens, refreshTokens, users } from "../../db/schema";
+import { emailVerificationTokens, passwordResetTokens, refreshTokens, users } from "../../db/schema";
 import {
   ApiError,
   badRequest,
@@ -280,4 +280,76 @@ export async function getMe(userId: string): Promise<{
     },
     recommendations,
   };
+}
+
+// ── Password reset (US-7.1.1 "force password reset") ─────────
+
+export async function createPasswordResetToken(
+  userId: string,
+  createdBy?: string | null,
+): Promise<string> {
+  const { db } = await getDbHandle();
+  const rawToken = issueOpaqueToken();
+  const expiresAt = new Date(Date.now() + 24 * 3600 * 1000);
+  await db.insert(passwordResetTokens).values({
+    userId,
+    tokenHash: hashOpaqueToken(rawToken),
+    expiresAt,
+    createdBy: createdBy ?? null,
+  });
+  await db.update(users).set({ forcePasswordResetAt: new Date() }).where(eq(users.id, userId));
+  return rawToken;
+}
+
+export async function sendPasswordResetEmail(userId: string, token: string): Promise<void> {
+  const { db } = await getDbHandle();
+  const rows = await db
+    .select({ email: users.email, firstName: users.firstName })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!rows[0]) return;
+  const env = loadEnv();
+  const resetUrl = `${env.WEB_ORIGIN}/reset-password?token=${encodeURIComponent(token)}`;
+  await getMailer().sendEmail({
+    to: rows[0].email,
+    subject: "Your password reset request — Takwimu Data School",
+    text:
+      `Hi ${rows[0].firstName},\n\n` +
+      `An administrator requested a password reset for your Takwimu Data School account.\n\n` +
+      `Set a new password here: ${resetUrl}\n\n` +
+      `The link expires in 24 hours. If you didn't request this, please contact support.`,
+  });
+}
+
+export async function resetPasswordWithToken(token: string, newPassword: string): Promise<void> {
+  if (!isStrongPassword(newPassword)) throw badRequest(passwordError(), { password: "too_weak" });
+  const { db } = await getDbHandle();
+  const rows = await db
+    .select()
+    .from(passwordResetTokens)
+    .where(eq(passwordResetTokens.tokenHash, hashOpaqueToken(token)))
+    .limit(1);
+  const record = rows[0];
+  if (!record) throw badRequest("This reset link is invalid.", { token: "invalid" });
+  if (record.usedAt) throw badRequest("This reset link has already been used.", { token: "used" });
+  if (record.expiresAt < new Date()) {
+    throw badRequest("This reset link has expired. Ask an administrator for a new one.", { token: "expired" });
+  }
+
+  const userRows = await db.select().from(users).where(eq(users.id, record.userId)).limit(1);
+  const user = userRows[0];
+  if (!user || user.status === "deleted") {
+    throw badRequest("This account can no longer be reset.", { token: "invalid" });
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await db
+    .update(users)
+    .set({ passwordHash, forcePasswordResetAt: null })
+    .where(eq(users.id, record.userId));
+  await db.update(passwordResetTokens).set({ usedAt: new Date() }).where(eq(passwordResetTokens.id, record.id));
+  // Invalidate any live sessions so the old password is forced out.
+  await db.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.userId, record.userId));
+  void user;
 }

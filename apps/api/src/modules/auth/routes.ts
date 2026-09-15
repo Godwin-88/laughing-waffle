@@ -9,6 +9,7 @@ import {
   refresh as refreshService,
   REFRESH_COOKIE,
   register as registerService,
+  resetPasswordWithToken,
   verifyEmail as verifyEmailService,
   type AuthSuccess,
   type SessionMeta,
@@ -26,6 +27,11 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(16).max(512),
+  password: z.string().min(8).max(200),
 });
 
 function sessionMeta(req: FastifyRequest): SessionMeta {
@@ -92,6 +98,12 @@ export function registerAuthRoutes(app: FastifyInstance) {
     await logoutService(refreshToken);
     clearRefreshCookie(reply);
     return reply.send({ success: true });
+  });
+
+  app.post<{ Body: unknown }>("/auth/reset-password", async (req, reply) => {
+    const { token, password } = resetPasswordSchema.parse(req.body);
+    await resetPasswordWithToken(token, password);
+    return reply.send({ success: true, message: "Password updated. You can sign in with your new password." });
   });
 
   app.get<{ Querystring: { token?: string } }>("/auth/verify-email", async (req, reply) => {

@@ -101,6 +101,10 @@ Verified live, end-to-end, in local dev:
 | Video `failed` | Open the asset status endpoint — probe errors surface the ffmpeg stderr tail |
 | Transcode on a headless server | `ffmpeg-static` bundles a static binary; no system ffmpeg required |
 | Paid course won't enrol | Buy now → `/checkout/:id`; with `PAYMENTS_MODE=mock` click *Pay (simulated)*. If the "payment did not confirm" error persists, check `orders.status` in the DB (mock completion flips `pending → paid` and upserts the enrolment) |
+| Admin page returns 403 | Confirm the account `role=admin` in `users` (seeded `admin@takwimu.school` / `Takwimu123`). Non-admins get 403 on every `/admin/*` route |
+| Maintenance banner everywhere | The platform config still has `maintenance.enabled=true` — open `/admin/settings` (admins bypass the 503) and disable it, or restore a previous revision |
+| GDPR delete fails (503) | The export/delete worker surfaced a processing error — check `data_requests.error` in the DB; the most common cause is a DB CHECK-constraint violation (e.g. `users_status_check`), fixed by migration 0006 |
+| GDPR ZIP download 404 | Only the owning learner (or an admin) may download; requests older than their `expires_at` are invalid |
 
 ## Deployment sketch
 

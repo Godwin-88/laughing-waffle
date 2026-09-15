@@ -1,11 +1,12 @@
 import { and, desc, eq } from "drizzle-orm";
-import type { CheckoutOrderResponse, CreateOrderPayload, OrderListResponse, OrderSummary, PaymentProvider } from "@takwimu/shared";
+import type { CheckoutOrderResponse, CreateOrderPayload, OrderListResponse, OrderSummary, PaymentGateway, PaymentProvider } from "@takwimu/shared";
 import { loadEnv } from "../../config/env";
 import { getDb } from "../../db/client";
 import { courses, enrolments, orders, users } from "../../db/schema";
 import { badRequest, notFound, unauthorized } from "../../lib/errors";
 import { emitAnalyticsEvent } from "../../lib/events";
 import { generateOrderNumber } from "../../lib/orders";
+import { getConfig } from "../../lib/config";
 import { createPaymentIntent } from "./intent";
 import { confirmOrderPayment, refreshPendingOrder } from "./confirm";
 import type { PaymentClientMetadata } from "./providers";
@@ -33,6 +34,17 @@ export async function createOrder(
   const course = courseRows[0];
   if (!course) throw notFound("Course not found.");
   if (course.priceCents <= 0) throw badRequest("This course is free — enrol directly.");
+
+  // US-7.1.2 payment-gateway toggles: block disabled providers at checkout.
+  if (input.provider !== "mock") {
+    const cfg = await getConfig();
+    if (!cfg.payments.enabledGateways.includes(input.provider as PaymentGateway)) {
+      throw badRequest("This payment method is currently unavailable. Choose another.", {
+        code: "provider_disabled",
+        provider: input.provider,
+      });
+    }
+  }
 
   const userRows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   const user = userRows[0];

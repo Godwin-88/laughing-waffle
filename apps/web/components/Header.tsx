@@ -21,6 +21,7 @@ export function Header() {
     ...(user?.role === "instructor" || user?.role === "admin"
       ? [{ href: "/studio", label: "Studio" }]
       : []),
+    ...(user?.role === "admin" ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
   return (

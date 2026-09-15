@@ -3,6 +3,9 @@ import { isStrongPassword, passwordError, EMAIL_RE, INTEREST_OPTIONS } from "@ta
 import { hashOpaqueToken, issueOpaqueToken, msToSeconds, signAccessToken, verifyAccessToken } from "../src/lib/tokens";
 import { computeProfileStats } from "../src/lib/users";
 import { fisherYates, gradeQuizSnapshot } from "../src/modules/quizzes/service";
+import { requireAdmin } from "../src/modules/admin/service";
+import { defaultConfig } from "../src/lib/config";
+import { hasCompletedExport } from "../src/modules/gdpr/service";
 
 describe("password policy (spec US-1.1.1)", () => {
   it("accepts a strong password", () => {
@@ -137,5 +140,32 @@ describe("graded quiz grading (US-3.2.2)", () => {
     const b = fisherYates(input, () => 0.42);
     expect(a).toEqual(b);
     expect(a).toHaveLength(input.length);
+  });
+});
+describe("Sprint 7 — admin guard (US-7.1.1)", () => {
+  it("permits only the admin role", () => {
+    expect(() => requireAdmin("admin")).not.toThrow();
+    expect(() => requireAdmin("learner")).toThrow(/Admin access required/);
+    expect(() => requireAdmin("instructor")).toThrow(/Admin access required/);
+  });
+});
+
+describe("Sprint 7 — platform config defaults (US-7.1.2)", () => {
+  it("ships conservative defaults with all gateways + features enabled", () => {
+    const cfg = defaultConfig();
+    expect(cfg.platform.name).toBe("Takwimu Data School");
+    expect(cfg.maintenance.enabled).toBe(false);
+    expect(cfg.payments.enabledGateways).toEqual(["stripe", "mpesa", "paypal"]);
+    expect(cfg.features.certificates).toBe(true);
+    expect(cfg.platform.primaryColor).toMatch(/^#[0-9a-fA-F]{6}$/);
+  });
+});
+
+describe("Sprint 7 — GDPR export prerequisite (US-7.2.1)", () => {
+  it("requires a completed export before any deletion", () => {
+    expect(hasCompletedExport([{ type: "export", status: "completed" }])).toBe(true);
+    expect(hasCompletedExport([{ type: "export", status: "processing" }])).toBe(false);
+    expect(hasCompletedExport([{ type: "delete", status: "completed" }])).toBe(false);
+    expect(hasCompletedExport([])).toBe(false);
   });
 });

@@ -267,11 +267,39 @@ async function seedDemoUser() {
   console.log(`[seed] demo user: ${email} / Takwimu123`);
 }
 
+async function seedAdminUser() {
+  const { db } = getDb(loadEnv().DATABASE_URL);
+  const email = "admin@takwimu.school";
+  const existing = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.email, email))
+    .limit(1);
+  if (existing.length > 0) {
+    console.log("[seed] skip admin user (exists)");
+    return;
+  }
+  await db.insert(usersTable).values({
+    email,
+    passwordHash: await hashPassword("Takwimu123"),
+    firstName: "System",
+    lastName: "Administrator",
+    role: "admin",
+    emailVerifiedAt: new Date(),
+    consentGivenAt: new Date(),
+    interests: [],
+    experienceLevel: "advanced",
+    wizardStep: 3,
+  });
+  console.log(`[seed] admin user: ${email} / Takwimu123`);
+}
+
 async function main() {
   const mainCourses = await readJson(path.join(DATA_DIR, "courses.json"));
   const extraCourses = await readJson(path.join(DATA_DIR, "courses-extra.json"));
   await seedCourses([...mainCourses, ...extraCourses]);
   await seedDemoUser();
+  await seedAdminUser();
   console.log("\n[seed] done ✔");
 }
 

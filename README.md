@@ -5,7 +5,7 @@
 
 A full-stack TypeScript monorepo: **Fastify 5** API, **Next.js 15** web client, shared typed contract layer, Postgres 16 schema + migrations, seeded curriculum, and a self-hosted video pipeline (chunked upload → FFmpeg HLS transcode → enrolment-gated streaming).
 
-- **Sprints 1–6 delivered** — Auth & onboarding · Catalogue & search · Enrolment, progress & video lessons · Course builder & video pipeline · Graded quizzes & real-time progress engine (SSE) · Paid checkout & verified certificates. See [`docs/architecture.md`](docs/architecture.md) for scope and [`docs/development.md`](docs/development.md) for the roadmap.
+- **Sprints 1–7 delivered** — Auth & onboarding · Catalogue & search · Enrolment, progress & video lessons · Course builder & video pipeline · Graded quizzes & real-time progress engine (SSE) · Paid checkout & verified certificates · **Admin panel & GDPR** (user management + audit, platform config with maintenance/gateway/feature toggles, self-service data export & deletion). See [`docs/architecture.md`](docs/architecture.md) for scope and [`docs/development.md`](docs/development.md) for the roadmap.
 
 ```mermaid
 flowchart LR
@@ -13,7 +13,7 @@ flowchart LR
         W["App Router pages + client components<br/>VideoPlayer · EnrollCard · Studio · Dashboard"]
     end
     subgraph API["apps/api · Fastify 5 (:4000 /api/v1)"]
-        M["Modules<br/>auth · profile · catalogue · enrolments · video · builder"]
+        M["Modules<br/>auth · profile · catalogue · enrolments · video · builder<br/>quizzes · checkout · certificates · admin · gdpr"]
         DB[("PostgreSQL 16")]
         S3["Storage<br/>local | Backblaze B2"]
         FF["FFmpeg worker<br/>(HLS ladders)"]
@@ -49,6 +49,7 @@ npm run dev              # API :4000 · Web :3000
 | API health | `curl http://localhost:4000/api/v1/health` |
 | Web UI | http://localhost:3000 |
 | Demo login | `demo@takwimu.school` / `Takwimu123` |
+| Demo admin | `admin@takwimu.school` / `Takwimu123` · `/admin` |
 
 Stop with `Ctrl+C` then `npm run db:down`.
 

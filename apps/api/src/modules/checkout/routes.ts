@@ -5,6 +5,7 @@ import { isMockMode, verifyStripeSignature } from "./providers";
 import { createOrder, getOrderSummary, listMyOrders, mockCompleteOrder, pollOrderStatus } from "./service";
 import { confirmOrderPayment } from "./confirm";
 import { unauthorized } from "../../lib/errors";
+import { getConfig } from "../../lib/config";
 
 const createOrderSchema = z.object({
   courseSlug: z.string().min(2).max(200),
@@ -20,6 +21,19 @@ function requestOrigin(req: FastifyRequest): string {
 }
 
 export function registerCheckoutRoutes(app: FastifyInstance) {
+  // ── US-7.1.2 gateway availability (web renders enabled providers) ──
+  app.get(
+    "/checkout/providers",
+    { preHandler: [app.authenticate] },
+    async (_req, reply) => {
+      const cfg = await getConfig();
+      return reply.send({
+        enabledGateways: cfg.payments.enabledGateways,
+        mode: isMockMode() ? "mock" : "live",
+      });
+    },
+  );
+
   // ── US-2.2.2 create a paid checkout ────────────────────────
   app.post(
     "/checkout/orders",

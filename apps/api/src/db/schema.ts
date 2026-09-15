@@ -36,6 +36,9 @@ export const users = pgTable(
     interests: jsonb("interests").$type<string[]>().notNull().default([]),
     experienceLevel: text("experience_level"),
     wizardStep: integer("wizard_step").notNull().default(0),
+    lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
+    forcePasswordResetAt: timestamp("force_password_reset_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -391,3 +394,72 @@ export const certificates = pgTable(
   },
   (t) => [uniqueIndex("certificates_user_course_unique").on(t.userId, t.courseId)],
 );
+// ─────────────────────────────────────────────────────────────
+// Sprint 7 — Admin panel (US-7.1.x) & GDPR (US-7.2.1)
+// ─────────────────────────────────────────────────────────────
+
+export const auditLogs = pgTable("audit_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  actorId: uuid("actor_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  action: text("action").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: uuid("target_id"),
+  details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+});
+
+export const systemConfig = pgTable("system_config", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<unknown>().notNull(),
+  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const configRevisions = pgTable("config_revisions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+  actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+  appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type DataRequestType = "export" | "delete";
+export type DataRequestStatus =
+  | "pending_confirmation"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "cancelled";
+export type DataRequestInitiator = "self" | "admin";
+
+export const dataRequests = pgTable("data_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").$type<DataRequestType>().notNull(),
+  status: text("status").$type<DataRequestStatus>().notNull().default("pending_confirmation"),
+  initiatedBy: text("initiated_by").$type<DataRequestInitiator>().notNull().default("self"),
+  adminId: uuid("admin_id").references(() => users.id, { onDelete: "set null" }),
+  tokenHash: text("token_hash"),
+  storageKey: text("storage_key"),
+  error: text("error"),
+  requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

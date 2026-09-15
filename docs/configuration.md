@@ -78,6 +78,13 @@ Google and Microsoft flows are scaffolded in `apps/api/src/modules/auth/sso.ts`:
 - Live mode (`PAYMENTS_MODE=live`) needs provider keys — `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`, `MPESA_*` (Daraja STK: consumer key/secret, passkey, shortcode, callback URL) or `PAYPAL_*` (client id/secret/webhook id). Signed webhooks then drive the same confirm path.
 - Certificates need only storage (local or B2); PDFs are generated server-side with `pdfkit`.
 
+## Admin platform config & GDPR (Sprint 7)
+
+- **No env file needed** — the admin panel (`/admin/settings`) edits a `system_config` row at runtime: branding, email sender, maintenance mode, payment-gateway toggles, feature flags. Every change snapshots a full revision; `/admin/settings` can roll back.
+- **Propagation**: config is cached Redis-backed (`takwimu:platform-config`, 60 s TTL) with an in-memory fallback of the same TTL. `REDIS_URL` is **optional** — set it when you run multiple API nodes so a config change is shared; unset uses the single-node in-memory cache. Admin changes appear within 60 s either way.
+- **Maintenance mode** blocks every non-admin request with `503` (auth + `/health` stay reachable so an admin can log in and disable it).
+- **GDPR** needs no extra config: exports are written through the same storage driver under `gdpr-exports/` (local `uploads/` or B2); confirmation/deletion emails go through the configured mailer. The demo admin account is `admin@takwimu.school` / `Takwimu123`.
+
 ## Security checklist for production
 
 - `JWT_SECRET` at least 32 random characters, stored in the secret manager, rotated on deploy.
@@ -86,3 +93,4 @@ Google and Microsoft flows are scaffolded in `apps/api/src/modules/auth/sso.ts`:
 - Configure SMTP so verification links are not printed to logs.
 - Run the API behind TLS; keep `TRANSCODE_WORKER` on only on the media worker node.
 - Add SSRF/key guards before enabling B2 custom endpoints.
+- Audit log is append-only by design; restrict DB `UPDATE audit_logs`/`DELETE` privileges (or rely on Postgres row-security) so admins cannot tamper with their own trail.

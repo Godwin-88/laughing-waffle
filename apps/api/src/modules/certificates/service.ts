@@ -8,6 +8,7 @@ import { generateCertificateNumber, linkedinCertificationLink } from "../../lib/
 import { getStorage } from "../../storage/storage";
 import { getMailer } from "../../mail/mailer";
 import { publishProgressEvent } from "../../lib/progress-events";
+import { getConfig } from "../../lib/config";
 import { buildCertificatePdf, certificateKeyFor } from "./pdf";
 
 type CertRow = typeof certificates.$inferSelect;
@@ -100,6 +101,12 @@ export async function computeEligibility(userId: string, courseId: string): Prom
 
 export async function certificateEligibility(userId: string, courseSlug: string): Promise<CertificateEligibilityResponse> {
   const { db } = getDb(loadEnv().DATABASE_URL);
+  const cfg = await getConfig();
+  if (!cfg.features.certificates) {
+    throw badRequest("Certificates are currently disabled by the platform administrator.", {
+      code: "certificates_disabled",
+    });
+  }
   const courseRows = await db.select().from(courses).where(and(eq(courses.slug, courseSlug), eq(courses.status, "published"))).limit(1);
   const course = courseRows[0];
   if (!course) throw notFound("Course not found.");
@@ -129,6 +136,13 @@ export async function certificateEligibility(userId: string, courseSlug: string)
 /** Issue a certificate for a completed course (idempotent). US-5.1.2. */
 export async function issueCertificate(userId: string, courseSlug: string): Promise<CertificateSummary> {
   const { db } = getDb(loadEnv().DATABASE_URL);
+
+  const cfg = await getConfig();
+  if (!cfg.features.certificates) {
+    throw badRequest("Certificates are currently disabled by the platform administrator.", {
+      code: "certificates_disabled",
+    });
+  }
 
   const courseRows = await db
     .select()

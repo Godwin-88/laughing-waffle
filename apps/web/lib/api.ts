@@ -1,5 +1,8 @@
 import type {
+  AdminUserListResponse,
+  AdminUserRow,
   ApiErrorPayload,
+  AuditLogListResponse,
   AuthMeResponse,
   AuthTokensResponse,
   BuilderCourse,
@@ -9,6 +12,7 @@ import type {
   CertificateSummary,
   CertificateVerificationResponse,
   CheckoutOrderResponse,
+  ConfigRevisionsResponse,
   CourseDetail,
   CourseFilters,
   CourseProgressResponse,
@@ -16,13 +20,18 @@ import type {
   CreateLessonPayload,
   CreateModulePayload,
   CreateOrderPayload,
+  DataRequestListResponse,
   EnrolmentContext,
   EnrolmentSummary,
   EnrolNowResponse,
+  GdprActionResponse,
+  GdprConfirmResponse,
   LessonPublic,
   OrderListResponse,
   OrderSummary,
+  PaymentGateway,
   PaymentProvider,
+  PlatformConfig,
   ProgressEventMessage,
   PublicUser,
   QuizAttemptResult,
@@ -32,6 +41,8 @@ import type {
   UpdateCoursePayload,
   UpdateLessonPayload,
   UpdateModulePayload,
+  UserRole,
+  UserStatus,
   VideoAssetStatus,
   VideoLessonInfo,
   VideoPartUrlResponse,
@@ -490,4 +501,131 @@ export function skillLabel(level: string): string {
     default:
       return level[0]?.toUpperCase() + level.slice(1);
   }
+}
+/**
+ * Sprint 7 — GDPR (US-7.2.1). Self-service export/delete with email
+ * confirmation; the confirm token is sent in the body (never the URL).
+ */
+export const gdprApi = {
+  async requestExport(): Promise<GdprActionResponse> {
+    return api("/gdpr/export", { method: "POST", body: JSON.stringify({}) });
+  },
+  async requestDelete(): Promise<GdprActionResponse> {
+    return api("/gdpr/delete", { method: "POST", body: JSON.stringify({}) });
+  },
+  async confirm(token: string): Promise<GdprConfirmResponse> {
+    return api("/gdpr/confirm", { method: "POST", body: JSON.stringify({ token }) });
+  },
+  async mine(): Promise<DataRequestListResponse> {
+    return api("/gdpr/requests");
+  },
+  /** Trigger a browser download of a completed export ZIP. */
+  async download(requestId: string): Promise<void> {
+    const res = await apiRaw(`/gdpr/exports/${requestId}/download`);
+    if (!res.ok) throw new ApiClientError({ error: { code: "gdpr_download", message: `Download failed (${res.status})` } }, res.status);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `takwimu-data-export-${requestId.slice(0, 8)}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+};
+
+/** Sprint 7 — checkout gateway availability (PAYMENTS_MODE aware). */
+export interface CheckoutProvidersResponse {
+  enabledGateways: PaymentGateway[];
+  mode: "mock" | "live";
+}
+
+/**
+ * Sprint 7 — admin panel (US-7.1.x). All routes 403 for non-admins; the
+ * maintenance guard returns 503 for everyone except admins while enabled.
+ */
+export const adminApi = {
+  async overview(): Promise<AdminOverview> {
+    return api("/admin/overview");
+  },
+  async users(filters: { search?: string; role?: string; status?: string; page?: number; pageSize?: number } = {}): Promise<AdminUserListResponse> {
+    const params = new URLSearchParams();
+    if (filters.search) params.set("search", filters.search);
+    if (filters.role) params.set("role", filters.role);
+    if (filters.status) params.set("status", filters.status);
+    params.set("page", String(filters.page ?? 1));
+    params.set("pageSize", String(filters.pageSize ?? 20));
+    const qs = params.toString();
+    return api(`/admin/users${qs ? `?${qs}` : ""}`);
+  },
+  async updateUser(id: string, patch: { role?: UserRole; status?: UserStatus }): Promise<{ user: AdminUserRow }> {
+    return api(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  },
+  async bulkSuspend(userIds: string[]): Promise<{ suspended: number }> {
+    return api("/admin/users/bulk-suspend", { method: "POST", body: JSON.stringify({ userIds }) });
+  },
+  async forcePasswordReset(id: string): Promise<{ emailSentTo: string }> {
+    return api(`/admin/users/${id}/force-password-reset`, { method: "POST", body: JSON.stringify({}) });
+  },
+  async deleteUser(id: string): Promise<{ message: string }> {
+    return api(`/admin/users/${id}`, { method: "DELETE" });
+  },
+  async exportCsv(filters: { search?: string; role?: string; status?: string } = {}): Promise<void> {
+    const params = new URLSearchParams();
+    if (filters.search) params.set("search", filters.search);
+    if (filters.role) params.set("role", filters.role);
+    if (filters.status) params.set("status", filters.status);
+    const res = await apiRaw(`/admin/users/export.csv${params.toString() ? `?${params.toString()}` : ""}`);
+    if (!res.ok) throw new ApiClientError({ error: { code: "csv", message: `Export failed (${res.status})` } }, res.status);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "takwimu-admin-users.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+  async config(): Promise<{ config: PlatformConfig }> {
+    return api("/admin/config");
+  },
+  async updateConfig(patch: Record<string, unknown>): Promise<{ config: PlatformConfig; revisionId: string }> {
+    return api("/admin/config", { method: "PATCH", body: JSON.stringify(patch) });
+  },
+  async configRevisions(limit = 10): Promise<ConfigRevisionsResponse> {
+    return api(`/admin/config/revisions?limit=${limit}`);
+  },
+  async rollbackConfig(revisionId: string): Promise<{ config: PlatformConfig; revisionId: string }> {
+    return api(`/admin/config/revisions/${revisionId}/rollback`, { method: "POST", body: JSON.stringify({}) });
+  },
+  async audit(filters: { actorId?: string; targetType?: string; limit?: number } = {}): Promise<AuditLogListResponse> {
+    const params = new URLSearchParams();
+    if (filters.actorId) params.set("actorId", filters.actorId);
+    if (filters.targetType) params.set("targetType", filters.targetType);
+    params.set("limit", String(filters.limit ?? 100));
+    return api(`/admin/audit?${params.toString()}`);
+  },
+  async gdprRequests(): Promise<DataRequestListResponse> {
+    return api("/admin/gdpr/requests");
+  },
+  async gdprExportForUser(id: string): Promise<GdprActionResponse> {
+    return api(`/admin/users/${id}/gdpr-export`, { method: "POST", body: JSON.stringify({}) });
+  },
+  async gdprDeleteForUser(id: string): Promise<GdprActionResponse> {
+    return api(`/admin/users/${id}/gdpr-delete`, { method: "POST", body: JSON.stringify({}) });
+  },
+};
+
+export interface AdminOverview {
+  users: number;
+  learners: number;
+  instructors: number;
+  admins: number;
+  publishedCourses: number;
+  paidOrders: number;
+  revenueCents: number;
+  pendingGdpr: number;
+  certificatesIssued: number;
 }

@@ -135,6 +135,42 @@ Ownership rules: only the course `instructorId` (or `admin`) may manage a course
 
 Claim sequence: all lessons completed **and** course quizzes passed (≥ `quizPassRequired`) → eligible; issuing stores a unique `TDS-CERT-…` number, writes the PDF to storage and returns `{downloadUrl, verifyUrl, linkedinUrl}`.
 
+## Admin — Sprint 7 (US-7.1.x)
+
+Every `/admin/*` route requires `role=admin` (route-level guard on top of Bearer auth); non-admins get `403`. Admin actions append rows to the audit log.
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/admin/overview` | bearer + admin | Platform stats: users by role, published courses, paid orders, revenue, pending GDPR, certificates |
+| `GET` | `/admin/users` | bearer + admin | List/search (`search`), filter (`role`, `status` incl. `pending_verification`), paginate (`page`, `pageSize`) |
+| `PATCH` | `/admin/users/:id` | bearer + admin | Change `{role, status}` — self-demotion & last-admin guards, admin must be demoted before suspension |
+| `POST` | `/admin/users/bulk-suspend` | bearer + admin | Bulk suspend up to 500 users (`{userIds}`), never self, never admins |
+| `POST` | `/admin/users/:id/force-password-reset` | bearer + admin | Mint reset token + email link |
+| `DELETE` | `/admin/users/:id` | bearer + admin | GDPR-delete (requires a completed export first → 409 otherwise) |
+| `GET` | `/admin/users/export.csv` | bearer + admin | Streaming CSV of filtered users |
+| `GET` | `/admin/config` | bearer + admin | Current `PlatformConfig` |
+| `PATCH` | `/admin/config` | bearer + admin | Partial patch (branding/email/maintenance/payments/features) → `{config, revisionId}`; propagates within 60 s |
+| `GET` | `/admin/config/revisions?limit=` | bearer + admin | Last N full-config snapshots |
+| `POST` | `/admin/config/revisions/:id/rollback` | bearer + admin | Restore a snapshot as the active config |
+| `GET` | `/admin/audit?actorId=&targetType=&limit=` | bearer + admin | Append-only audit trail |
+| `GET` | `/admin/gdpr/requests` | bearer + admin | All GDPR requests across the platform |
+| `POST` | `/admin/users/:id/gdpr-export` | bearer + admin | Trigger an export on a learner's behalf (email-confirmed) |
+| `POST` | `/admin/users/:id/gdpr-delete` | bearer + admin | Trigger deletion on a learner's behalf (email-confirmed) |
+
+Enforcement notes: **maintenance mode** → all non-admin requests get `503` (auth/health excluded so admins can log in and disable); **payment-gateway toggles** → `POST /checkout/orders` returns `400 provider_disabled` for a disabled provider; **feature flags** → e.g. `features.certificates=false` makes `POST /courses/:slug/certificate` return `400`.
+
+## GDPR — Sprint 7 (US-7.2.1)
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/gdpr/export` | bearer | Request a data export → email confirmation code |
+| `POST` | `/gdpr/delete` | bearer | Request account deletion → email confirmation code |
+| `POST` | `/gdpr/confirm` | bearer | Confirm with `{token}` → export ZIP generated or account anonymised |
+| `GET` | `/gdpr/requests` | bearer | My requests with statuses + `downloadUrl` |
+| `GET` | `/gdpr/exports/:requestId/download` | bearer (owner) | Download the completed ZIP (`application/zip`) |
+
+Request lifecycle: `pending_confirmation` → (confirm with single-use hashed token, 24 h expiry) → `processing` → `completed` (ZIP or anonymise) | `failed` | `cancelled`. Deletion keeps the user row (PII scrubbed, `status=deleted`, email → `deleted-…@privacy.takwimu.school`) so aggregate statistics survive; the request row is retained 30 days.
+
 ## Health
 
 | Method | Path | Auth | Description |

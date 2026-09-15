@@ -697,3 +697,133 @@ export interface CertificateVerificationResponse {
   issuedOn: string;
   platformName: string;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Sprint 7 — Admin panel (US-7.1.x) & GDPR (US-7.2.1)
+// ─────────────────────────────────────────────────────────────
+
+export type UserStatus = "active" | "suspended";
+export type PaymentGateway = "stripe" | "mpesa" | "paypal";
+export type FeatureFlagName = "discussions" | "certificates" | "offlineDownload";
+
+/** US-7.1.1 — one row in the admin user management table. */
+export interface AdminUserRow {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  status: UserStatus;
+  emailVerified: boolean;
+  createdAt: string;
+  lastActiveAt: string | null;
+  enrolmentCount: number;
+}
+
+export interface AdminUserListFilters {
+  search?: string;
+  role?: UserRole;
+  status?: UserStatus | "pending_verification";
+}
+
+export interface AdminUserListResponse {
+  items: AdminUserRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** US-7.1.1 — audit-log row (actor, action, target, timestamp). */
+export interface AuditLogEntry {
+  id: string;
+  actorId: string;
+  actorEmail: string | null;
+  actorName: string | null;
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface AuditLogListResponse {
+  items: AuditLogEntry[];
+  total: number;
+}
+
+/** US-7.1.2 — platform config surface editable from the admin UI. */
+export interface PlatformConfig {
+  platform: {
+    name: string;
+    logoKey: string | null;
+    primaryColor: string;
+    defaultLanguage: string;
+    timezone: string;
+  };
+  email: {
+    fromName: string;
+    fromAddress: string;
+  };
+  maintenance: {
+    enabled: boolean;
+    message: string;
+  };
+  payments: {
+    enabledGateways: PaymentGateway[];
+  };
+  features: {
+    discussions: boolean;
+    certificates: boolean;
+    offlineDownload: boolean;
+  };
+}
+
+export interface ConfigRevision {
+  id: string;
+  snapshot: PlatformConfig;
+  actorName: string | null;
+  appliedAt: string;
+}
+
+export interface ConfigRevisionsResponse {
+  items: ConfigRevision[];
+}
+
+export type DataRequestType = "export" | "delete";
+export type DataRequestStatus =
+  | "pending_confirmation"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "cancelled";
+export type DataRequestInitiator = "self" | "admin";
+
+/** US-7.2.1 — GDPR request summary (learner view + admin view). */
+export interface DataRequestSummary {
+  id: string;
+  type: DataRequestType;
+  status: DataRequestStatus;
+  initiatedBy: DataRequestInitiator;
+  requestedAt: string;
+  confirmedAt: string | null;
+  completedAt: string | null;
+  expiresAt: string | null;
+  downloadUrl: string | null;
+  error: string | null;
+}
+
+export interface DataRequestListResponse {
+  items: DataRequestSummary[];
+}
+
+export interface GdprActionResponse {
+  request: DataRequestSummary;
+  message: string;
+}
+
+export interface GdprConfirmResponse {
+  status: DataRequestStatus;
+  message: string;
+  /** Present when an admin triggered the request on behalf of a learner. */
+  administeredFor?: string | null;
+}

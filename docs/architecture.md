@@ -1,6 +1,6 @@
 # Architecture
 
-Scope delivered through **Sprint 6** of the master specification, with diagrams for key flows.
+Scope delivered through **Sprint 7** of the master specification, with diagrams for key flows.
 
 ## Delivered scope
 
@@ -12,6 +12,7 @@ Scope delivered through **Sprint 6** of the master specification, with diagrams 
 | **4 — Builder & Pipeline** | Instructor Studio (course/module/lesson CRUD + publish, ownership-scoped), chunked 5 MB upload (local/B2), FFmpeg HLS worker (360p/720p/1080p), captions & posters | US-4.1.1, US-4.1.2, US-4.1.3 |
 | **5 — Quizzes & Progress** | Graded end-of-module quizzes (server-side grading, snapshot attempts, time limit + auto-submit, max attempts + cooldown, shuffle, gradebook), progress engine (text auto-complete on scroll/timer, video ≥90% watched, quiz auto-complete on submission, SSE real-time progress stream) | US-3.2.2, US-5.1.1 |
 | **6 — Checkout & Payments** | Paid orders (Stripe / M-Pesa Daraja STK / PayPal adapters plug into one server-side confirm path), mock-mode end-to-end payments, order numbers + receipts (`TDS-…`), confirmation polling, and the certificate programme (eligibility gate = all lessons + passed quizzes → idempotent issue → PDF via pdfkit → public verification + LinkedIn deep link) | US-2.2.2, US-5.1.2 |
+| **7 — Admin & GDPR** | Admin panel: user management (search/filter, role & status changes with last-active tracking, bulk suspend, force password reset, CSV export, audit log per action) + platform configuration (branding, email sender, maintenance mode → global 503, payment-gateway toggles enforced at checkout, feature flags e.g. certificates, revision snapshots + rollback, Redis-backed 60s propagation). GDPR (US-7.2.1): self-service export (ZIP: profile, enrolments, progress, quiz attempts, gradebook, orders, certificates, analytics) and delete (PII scrub, `deleted` status, row retained for stats), email-confirmed opaque tokens, admin-on-behalf flows with export-prerequisite | US-7.1.x, US-7.2.1 |
 
 ## Runtime map
 
@@ -33,11 +34,13 @@ flowchart LR
         BLD["builder — US-4.1.x"]
         ORD["checkout — US-2.2.2<br/>orders, confirm, webhooks"]
         CERT["certificates — US-5.1.2<br/>eligibility, issue, verify"]
+        ADM["admin — US-7.1.x<br/>users, config, audit"]
+        GDPR["gdpr — US-7.2.1<br/>export, delete, confirm"]
         AUTH_PLUGIN["auth plugin<br/>(Bearer JWT + DB check)"]
     end
 
     NEXT --> AUTH_PLUGIN
-    NEXT --> AUTH & PROF & CAT & ENR & VID & MEDIA & BLD & QUIZ & SSE & ORD & CERT
+    NEXT --> AUTH & PROF & CAT & ENR & VID & MEDIA & BLD & QUIZ & SSE & ORD & CERT & ADM & GDPR
 
     AUTH & PROF --> PG[("PostgreSQL 16")]
     CAT --> PG
@@ -49,6 +52,10 @@ flowchart LR
     ORD --> PG
     CERT --> PG
     CERT --> STORE
+    ADM --> PG
+    GDPR --> PG
+    GDPR --> STORE
+    ADM --> REDIS[("Redis 7<br/>config cache, 60s TTL")]
     VID --> TRANSCODER["FFmpeg worker"]
     TRANSCODER --> STORE["Storage<br/>local | B2"]
     MEDIA --> STORE
@@ -242,9 +249,12 @@ erDiagram
         text first_name
         text last_name
         text role "learner|instructor|admin"
-        text status "active|disabled"
+        text status "active|disabled|suspended|deleted"
         timestamptz email_verified_at
         timestamptz consent_given_at
+        timestamptz last_active_at
+        timestamptz force_password_reset_at
+        timestamptz deleted_at
         text sso_provider
         text sso_subject
         jsonb interests
@@ -363,6 +373,50 @@ erDiagram
         uuid lesson_id FK
         jsonb payload
     }
+    AUDIT_LOGS {
+        uuid id PK
+        uuid actor_id FK "USERS.id"
+        text action
+        text target_type
+        uuid target_id
+        jsonb details
+        timestamptz created_at
+    }
+    PASSWORD_RESET_TOKENS {
+        uuid id PK
+        uuid user_id FK
+        text token_hash "hashed at rest"
+        timestamptz expires_at
+        timestamptz used_at
+        timestamptz created_at
+        uuid created_by FK "admin who forced it"
+    }
+    SYSTEM_CONFIG {
+        text key PK
+        jsonb value
+        uuid updated_by FK
+        timestamptz updated_at
+    }
+    CONFIG_REVISIONS {
+        uuid id PK
+        jsonb snapshot "full config snapshot"
+        uuid actor_id FK
+        timestamptz applied_at
+    }
+    DATA_REQUESTS {
+        uuid id PK
+        uuid user_id FK
+        text type "export|delete"
+        text status "pending_confirmation|processing|completed|failed|cancelled"
+        text initiated_by "self|admin"
+        uuid admin_id FK
+        text token_hash "hashed, single-use"
+        text storage_key "export ZIP"
+        timestamptz requested_at
+        timestamptz confirmed_at
+        timestamptz completed_at
+        timestamptz expires_at
+    }
 ```
 ## Enrolment & progress lifecycle
 
@@ -372,7 +426,7 @@ flowchart LR
     B -- No --> C["Enrol CTA -> /login?next=..."]
     B -- Yes --> D["POST /enrolments {courseSlug}"]
     D --> E{Price > 0?}
-    E -- Yes --> F["Paid checkout (Sprint 6 not built) -> blocked"]
+    E -- Yes --> F["POST /checkout/orders -> redirect to /checkout/:orderId<br/>mock/live; webhook or poll confirm (Sprint 6)"]
     E -- No --> G["Insert enrolment (unique user+course)"]
     G --> H["Redirect to first lesson"]
     H --> I{"Lesson kind?"}
@@ -387,6 +441,46 @@ flowchart LR
     M --> N["lesson_progress upsert (survives session expiry)"]
     N --> N2["SSE lesson-completed { coursePercent }"]
     N2 --> O["Dashboard My Learning bar updates in real time"]
+```
+
+## GDPR & admin flows (Sprint 7)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor L as Learner
+    actor A as Admin
+    participant N as Next.js web
+    participant API as Fastify API
+    participant P as PostgreSQL
+    participant ST as Storage (local | B2)
+
+    Note over L,API: US-7.2.1 self-service export
+    L->>N: Settings → Privacy & data → Request export
+    N->>API: POST /gdpr/export
+    API->>P: insert data_requests (pending_confirmation, token_hash)
+    API-->>L: email with one-time confirm code
+    L->>API: POST /gdpr/confirm { token }
+    API->>P: status → processing, consume token
+    API->>P: read profile/enrolments/progress/quiz/orders/certs
+    API->>ST: write gdpr-exports/:id.zip
+    API->>P: status → completed + storage_key
+    L->>API: GET /gdpr/exports/:id/download
+    API-->>L: application/zip (PK)
+
+    Note over A,API: US-7.1.1 admin user management + audit
+    A->>API: PATCH /admin/users/:id { role | status }
+    API->>API: requireAdminRole guard (route-level)
+    API->>P: update + INSERT audit_logs (user.role_changed / user.suspended)
+    A->>API: GET /admin/audit
+    API-->>A: append-only trail
+
+    Note over A,API: US-7.1.2 platform configuration
+    A->>API: PATCH /admin/config { maintenance/payments/features }
+    API->>P: snapshot → config_revisions + upsert system_config
+    API->>API: invalidate Redis cache (60s TTL propagation)
+    A->>API: POST /admin/config/revisions/:id/rollback
+    API->>P: snapshot current + restore chosen snapshot
 ```
 
 ## Delivery roadmap (master spec)
@@ -409,14 +503,13 @@ gantt
     section Sprint 6
     Checkout & payments               :s6, after s5, 7d
     section Sprint 7
-    Assessments & certificates        :s7, after s6, 7d
+    Admin panel & GDPR                :s7, after s6, 7d
     section Sprint 8
-    Analytics & instructor console    :s8, after s7, 7d
+    Discussions & notifications       :s8, after s7, 7d
     section Sprint 9
-    Admin, compliance, migrations     :s9, after s8, 7d
+    LTI 1.3, API, analytics           :s9, after s8, 7d
     section Sprint 10
-    Hardening, observability, launch  :s10, after s9, 7d
+    SAML SSO, bulk enrolment, offline :s10, after s9, 7d
 ```
 
-**Done:** Sprints 1–6 · **Next:** Sprint 7 (assessments & certificates package — deeper assessment types beyond module quizzes).
-```
+**Done:** Sprints 1–7 · **Next:** Sprint 8 (Discussions US-6.1.1 & Notifications US-10.1.1).
