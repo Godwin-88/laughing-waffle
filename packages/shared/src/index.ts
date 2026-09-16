@@ -1108,3 +1108,166 @@ export interface ActivityHeartbeatResponse {
   ok: true;
   streakDays: number;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Sprint 10 — SAML SSO (US-1.1.3)
+// ─────────────────────────────────────────────────────────────
+
+export interface SamlProviderRow {
+  id: string;
+  label: string;
+  metadataXml: string;
+  issuer: string | null;
+  entityId: string | null;
+  ssoUrl: string | null;
+  x509Cert: string | null;
+  lmsRoleAttribute: string;
+  status: "active" | "paused";
+  lastRefreshAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SamlProviderListResponse {
+  items: SamlProviderRow[];
+  total: number;
+}
+
+export interface CreateSamlProviderPayload {
+  label: string;
+  metadataXml: string;
+  lmsRoleAttribute?: string;
+  status?: "active" | "paused";
+}
+
+export interface UpdateSamlProviderPayload {
+  label?: string;
+  metadataXml?: string;
+  lmsRoleAttribute?: string;
+  status?: "active" | "paused";
+}
+
+/** Public subset used by the login page (no XML / cert exposure). */
+export interface SamlProviderPublic {
+  id: string;
+  label: string;
+}
+
+export interface SamlLoginProvidersResponse {
+  items: SamlProviderPublic[];
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sprint 10 — admin bulk enrolment (US-2.2.3)
+// ─────────────────────────────────────────────────────────────
+
+export type BulkRowStatus = "valid" | "invalid" | "enrolled" | "skipped";
+
+export interface BulkRowInput {
+  email: string;
+  cohortName?: string | null;
+  expiryDate?: string | null;
+}
+
+export interface BulkRowResult {
+  row: number;
+  email: string;
+  status: BulkRowStatus;
+  reason?: string | null;
+}
+
+export interface BulkEnrolmentPreview {
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  rows: BulkRowResult[];
+  fileName: string | null;
+  courseId: string | null;
+  skippedRows: number;
+  enrolledRows: number;
+}
+
+export interface BulkEnrolmentJobSummary {
+  id: string;
+  courseId: string;
+  courseTitle: string | null;
+  fileName: string;
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  enrolledRows: number;
+  skippedRows: number;
+  status: "pending" | "processing" | "completed" | "failed";
+  report: BulkRowResult[];
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface BulkEnrolmentJobListResponse {
+  items: BulkEnrolmentJobSummary[];
+  total: number;
+}
+
+export interface BulkEnrolmentJobDetail extends BulkEnrolmentJobSummary {
+  rows: Array<{
+    email: string;
+    cohortName: string | null;
+    expiryDate: string | null;
+    status: BulkRowStatus;
+    reason: string | null;
+  }>;
+}
+
+export interface CreateBulkEnrolmentPayload {
+  courseId: string;
+  /** Either raw CSV text or a JSON array of rows. */
+  csv?: string;
+  rows?: BulkRowInput[];
+  fileName?: string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sprint 10 — offline lesson downloads (US-3.1.2)
+// ─────────────────────────────────────────────────────────────
+
+export type OfflineDownloadStatus =
+  | "queued"
+  | "processing"
+  | "ready"
+  | "expired"
+  | "revoked"
+  | "failed";
+
+export interface OfflineDownloadRow {
+  id: string;
+  lessonId: string;
+  lessonTitle: string;
+  courseTitle: string;
+  status: OfflineDownloadStatus;
+  progress: number;
+  sizeBytes: number;
+  /** Device-bound AES key wrapper — only the matching device can unwrap. */
+  keyWrapped: Record<string, string> | null;
+  /** Signed URL to fetch the encrypted payload (ready downloads only). */
+  fileUrl: string | null;
+  expiresAt: string;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface OfflineDownloadListResponse {
+  items: OfflineDownloadRow[];
+  total: number;
+}
+
+export interface CreateOfflineDownloadPayload {
+  lessonId: string;
+  /** Client-generated identifier; binds the content key to this device. */
+  deviceId: string;
+}
+
+export interface CreateOfflineDownloadResponse {
+  download: OfflineDownloadRow;
+  /** Raw AES-GCM encrypted lesson bundle (device must decrypt with unwrapped key). */
+  ready: boolean;
+}

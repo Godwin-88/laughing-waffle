@@ -107,3 +107,8 @@ Google and Microsoft flows are scaffolded in `apps/api/src/modules/auth/sso.ts`:
 - Run the API behind TLS; keep `TRANSCODE_WORKER` on only on the media worker node.
 - Add SSRF/key guards before enabling B2 custom endpoints.
 - Audit log is append-only by design; restrict DB `UPDATE audit_logs`/`DELETE` privileges (or rely on Postgres row-security) so admins cannot tamper with their own trail.
+## Sprint 10 — SAML, bulk enrolment & offline
+
+- **SAML SSO** needs no new environment variables in dev (`SAML_MOCK` assertions are used when `NODE_ENV=development|test`). In production, SAML certificates are read from the IdP metadata you paste into **Admin → SAML SSO**; keep the SP sign-up/private key (or front an external IdP) behind your secret manager.
+- **Offline downloads** interoperate with the existing storage driver (local or B2) — bundles live under `user-uploads/offline/…`. The `features.offlineDownload` platform flag (Admin → Settings) gates the whole feature; it defaults to **on**.
+- **Bulk enrolment** reads only from the existing `users` table — emails must match existing accounts (unknown emails are skipped with a reason, never JIT-created).

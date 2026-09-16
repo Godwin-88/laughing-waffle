@@ -100,6 +100,14 @@ export default function AdminOverviewPage() {
           <p className="text-lg font-bold text-ink-900">LTI integrations</p>
           <p className="mt-1 text-sm text-ink-600">Register Canvas/Moodle/Blackboard as LTI 1.3 platforms for deep-link launches and grade passback (US-8.1.2).</p>
         </Link>
+        <Link href="/admin/saml" className="rounded-2xl border border-ink-200 bg-white p-6 shadow-sm transition hover:border-brand-300 hover:shadow">
+          <p className="text-lg font-bold text-ink-900">SAML SSO</p>
+          <p className="mt-1 text-sm text-ink-600">Register enterprise identity providers and map their assertion roles onto the platform (US-1.1.3).</p>
+        </Link>
+        <Link href="/admin/bulk-enrol" className="rounded-2xl border border-ink-200 bg-white p-6 shadow-sm transition hover:border-brand-300 hover:shadow">
+          <p className="text-lg font-bold text-ink-900">Bulk enrolment</p>
+          <p className="mt-1 text-sm text-ink-600">Preview and commit CSV/JSON learner cohorts into a course in one job (US-2.2.3).</p>
+        </Link>
       </div>
     </main>
   );

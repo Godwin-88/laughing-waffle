@@ -121,3 +121,11 @@ Verified live, end-to-end, in local dev:
 - **Web**: `npm run build` + `npm start` (or static export) behind the CDN.
 - **Storage**: B2 buckets (`B2_BUCKET_*`), keys in the secret manager.
 - **Videos**: keep the source + HLS ladder in the private `course-assets` bucket; only the API proxy serves them.
+## Sprint 10 — troubleshooting
+
+| Symptom | Cause / fix |
+| --- | --- |
+| Bulk job reports rows `skipped: No account found` | The CSV/JSON contains emails with no matching `users` row. Register or invite those learners first — bulk enrolment never auto-creates accounts. |
+| Offline download returns 403 | The learner isn't enrolled (or the enrolment has expired), or the `offlineDownload` feature flag is off. |
+| SAML ACS returns 400 in dev | The mock assertion requires a valid `email`; check `SAML_MOCK` body shape `{ email, firstName?, lastName?, lms_role? }`. |
+| SAML login redirect fails | The provider is `paused` (409) or the pasted metadata has no HTTP-Redirect/POST SSO binding. Re-check Admin → SAML SSO → metadata. |

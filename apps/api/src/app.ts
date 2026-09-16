@@ -5,6 +5,9 @@ import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import fastify from "fastify";
 import rawBodyPlugin from "fastify-raw-body";
+import { registerSamlRoutes } from "./modules/saml/routes";
+import { registerBulkEnrolmentRoutes } from "./modules/bulk-enrolment/routes";
+import { registerOfflineRoutes } from "./modules/offline/routes";
 import type { Env } from "./config/env";
 import { loadEnv } from "./config/env";
 import { registerErrorHandler } from "./lib/errors";
@@ -138,6 +141,12 @@ export async function buildApp(opts: BuildOptions = {}) {
           registerLtiAdminRoutes(v1);
           // US-8.1.1 — OAuth 2.0 client-credentials admin management.
           registerOAuthAdminRoutes(v1);
+          // US-1.1.3 — SAML 2.0 institutional SSO (public + admin).
+          registerSamlRoutes(v1);
+          // US-2.2.3 — JSON/CSV bulk enrolment preview + async jobs.
+          registerBulkEnrolmentRoutes(v1);
+          // US-3.1.2 — device-bound offline lesson downloads.
+          registerOfflineRoutes(v1);
         },
         { prefix: "/v1" },
       );

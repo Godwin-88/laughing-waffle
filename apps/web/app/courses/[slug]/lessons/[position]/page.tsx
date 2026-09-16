@@ -10,6 +10,7 @@ import { GradedQuiz } from "@/components/GradedQuiz";
 import { TextLessonCompletion } from "@/components/TextLessonCompletion";
 import { DiscussionBoard } from "@/components/DiscussionBoard";
 import { ActivityHeartbeat } from "@/components/ActivityHeartbeat";
+import { OfflineDownloadButton } from "@/components/OfflineDownloadButton";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +90,10 @@ export default async function LessonPage({ params }: Props) {
               </Link>
             ) : null}
           </div>
+        </div>
+        <div className="mt-6">
+          {/* US-3.1.2 — device-bound offline download (enrolled learners only). */}
+          <OfflineDownloadButton lessonId={lesson.id} />
         </div>
       </article>
 

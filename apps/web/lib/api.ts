@@ -69,6 +69,20 @@ import type {
   VideoLessonInfo,
   VideoPartUrlResponse,
   VideoUploadSession,
+  BulkEnrolmentJobDetail,
+  BulkEnrolmentJobListResponse,
+  BulkEnrolmentJobSummary,
+  BulkEnrolmentPreview,
+  CreateBulkEnrolmentPayload,
+  CreateOfflineDownloadPayload,
+  CreateOfflineDownloadResponse,
+  CreateSamlProviderPayload,
+  OfflineDownloadListResponse,
+  OfflineDownloadRow,
+  SamlLoginProvidersResponse,
+  SamlProviderListResponse,
+  SamlProviderRow,
+  UpdateSamlProviderPayload,
 } from "@takwimu/shared";
 
 export const API_BASE =
@@ -766,5 +780,69 @@ export const ltiAdminApi = {
     return registrationId
       ? api(`/lti/registrations/${registrationId}/grades`)
       : api(`/lti/grades`);
+  },
+};
+
+// ───────────────────────────────────────────────────────────────
+// Sprint 10 — SAML SSO (US-1.1.3)
+// ───────────────────────────────────────────────────────────────
+
+/** Admin CRUD for SAML 2.0 identity-provider registrations. */
+export const samlApi = {
+  async list(): Promise<SamlProviderListResponse> {
+    return api("/saml/providers");
+  },
+  async create(payload: CreateSamlProviderPayload): Promise<SamlProviderRow> {
+    return api("/saml/providers", { method: "POST", body: JSON.stringify(payload) });
+  },
+  async update(id: string, patch: UpdateSamlProviderPayload): Promise<SamlProviderRow> {
+    return api(`/saml/providers/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+  },
+  async refresh(id: string): Promise<SamlProviderRow> {
+    return api(`/saml/providers/${encodeURIComponent(id)}/refresh`, { method: "POST", body: JSON.stringify({}) });
+  },
+  async remove(id: string): Promise<{ ok: true }> {
+    return api(`/saml/providers/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+  async publicProviders(): Promise<SamlLoginProvidersResponse> {
+    return api("/saml/providers/public");
+  },
+};
+
+// ───────────────────────────────────────────────────────────────
+// Sprint 10 — admin bulk enrolment (US-2.2.3)
+// ───────────────────────────────────────────────────────────────
+
+export const bulkEnrolmentApi = {
+  async preview(payload: CreateBulkEnrolmentPayload): Promise<BulkEnrolmentPreview> {
+    return api("/bulk-enrolments/preview", { method: "POST", body: JSON.stringify(payload) });
+  },
+  async createJob(payload: CreateBulkEnrolmentPayload): Promise<BulkEnrolmentJobSummary> {
+    return api("/bulk-enrolments/jobs", { method: "POST", body: JSON.stringify(payload) });
+  },
+  async jobs(): Promise<BulkEnrolmentJobListResponse> {
+    return api("/bulk-enrolments/jobs");
+  },
+  async job(id: string): Promise<BulkEnrolmentJobDetail> {
+    return api(`/bulk-enrolments/jobs/${encodeURIComponent(id)}`);
+  },
+};
+
+// ───────────────────────────────────────────────────────────────
+// Sprint 10 — offline lesson downloads (US-3.1.2)
+// ───────────────────────────────────────────────────────────────
+
+export const offlineApi = {
+  async create(payload: CreateOfflineDownloadPayload): Promise<CreateOfflineDownloadResponse> {
+    return api("/offline/downloads", { method: "POST", body: JSON.stringify(payload) });
+  },
+  async mine(): Promise<OfflineDownloadListResponse> {
+    return api("/offline/downloads");
+  },
+  async get(id: string): Promise<OfflineDownloadRow> {
+    return api(`/offline/downloads/${encodeURIComponent(id)}`);
+  },
+  async cancel(id: string): Promise<{ ok: true }> {
+    return api(`/offline/downloads/${encodeURIComponent(id)}/cancel`, { method: "POST", body: JSON.stringify({}) });
   },
 };

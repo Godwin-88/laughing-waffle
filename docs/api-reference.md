@@ -253,3 +253,36 @@ Example error payload:
   "message": "Enrol in the course to watch this video."
 }
 ```
+## SAML SSO — Sprint 10 (US-1.1.3)
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| GET | `/saml/providers/public` | public | Active IdPs for the login page (label + id only). |
+| GET | `/saml/metadata` | public | SP metadata XML (share with each IdP). |
+| GET | `/saml/login/:id` | public | Redirects the learner to the IdP SSO URL (status `paused` → 409). |
+| POST | `/saml/acs` | public | ACS: verifies the `SAMLResponse`, provisions (JIT) + issues a session (mock mode in dev/test). |
+| GET | `/saml/providers` | admin | List providers (issuer, SSO URL, cert, role attribute, status). |
+| POST | `/saml/providers` | admin | Register an IdP from pasted metadata XML (`label`, `metadataXml`, `lmsRoleAttribute?`). |
+| PATCH | `/saml/providers/:id` | admin | Update label/status/role attribute. |
+| POST | `/saml/providers/:id/refresh` | admin | Re-parse metadata XML against a fresh URL. |
+| DELETE | `/saml/providers/:id` | admin | Remove the IdP registration. |
+
+## Bulk enrolment — Sprint 10 (US-2.2.3)
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| POST | `/bulk-enrolments/preview` | admin | Validate CSV/JSON rows (email format, dedupe, `course_id`, 5,000-row cap) without writing. |
+| POST | `/bulk-enrolments/jobs` | admin | Create an async enrolment job (JSON rows or CSV text, optional `cohortName`, `expiryDate`). |
+| GET | `/bulk-enrolments/jobs` | admin | List jobs (file name, progress, report). |
+| GET | `/bulk-enrolments/jobs/:id` | admin | Job detail with per-row statuses + reasons. |
+| POST | `/bulk-enrolments/upload-preview` | admin | Multipart CSV + `course_id` → same preview report. |
+
+## Offline downloads — Sprint 10 (US-3.1.2)
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| POST | `/offline/downloads` | learner (enrolled) | Create a device-bound download `{ lessonId, deviceId }` (AES-256-GCM, wrapped content key). |
+| GET | `/offline/downloads` | learner | List own downloads with status/progress/expiry. |
+| GET | `/offline/downloads/:id` | owner | Download detail. |
+| GET | `/offline/downloads/:id/file` | owner (ready) | Encrypted bundle (content-disposition attachment; expires 30d / enrolment end). |
+| POST | `/offline/downloads/:id/cancel` | owner | Revoke a download. |

@@ -178,6 +178,7 @@ export const enrolments = pgTable(
       .references(() => courses.id, { onDelete: "cascade" }),
     status: text("status").notNull().default("enrolled"),
     pricePaidCents: integer("price_paid_cents").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
     enrolledAt: timestamp("enrolled_at", { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
   },
@@ -493,6 +494,72 @@ export const discussionPosts = pgTable("discussion_posts", {
   moderationAt: timestamp("moderation_at", { withTimezone: true }),
   editedAt: timestamp("edited_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ── Sprint 10 — SAML, bulk enrolment, offline downloads ──────
+
+export const samlProviders = pgTable("saml_providers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  label: text("label").notNull(),
+  metadataXml: text("metadata_xml").notNull().default(""),
+  issuer: text("issuer"),
+  entityId: text("entity_id"),
+  ssoUrl: text("sso_url"),
+  x509Cert: text("x509_cert"),
+  lmsRoleAttribute: text("lms_role_attribute").notNull().default("lms_role"),
+  status: text("status").notNull().default("active"),
+  createdBy: uuid("created_by").references(() => users.id),
+  lastRefreshAt: timestamp("last_refresh_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const bulkEnrolmentJobs = pgTable("bulk_enrolment_jobs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  adminId: uuid("admin_id").notNull().references(() => users.id),
+  courseId: uuid("course_id").notNull().references(() => courses.id),
+  filename: text("filename").notNull().default("upload.csv"),
+  totalRows: integer("total_rows").notNull().default(0),
+  validRows: integer("valid_rows").notNull().default(0),
+  invalidRows: integer("invalid_rows").notNull().default(0),
+  enrolledRows: integer("enrolled_rows").notNull().default(0),
+  skippedRows: integer("skipped_rows").notNull().default(0),
+  status: text("status").notNull().default("pending"),
+  report: jsonb("report").$type<Array<Record<string, unknown>>>().notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+});
+
+export const bulkEnrolmentRows = pgTable("bulk_enrolment_rows", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  jobId: uuid("job_id").notNull().references(() => bulkEnrolmentJobs.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  courseId: uuid("course_id").notNull().references(() => courses.id),
+  cohortName: text("cohort_name"),
+  expiryDate: timestamp("expiry_date", { withTimezone: true }),
+  status: text("status").notNull().default("invalid"),
+  reason: text("reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const offlineDownloads = pgTable("offline_downloads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lessonId: uuid("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+  enrolmentId: uuid("enrolment_id").references(() => enrolments.id, { onDelete: "set null" }),
+  deviceId: text("device_id").notNull(),
+  status: text("status").notNull().default("queued"),
+  progress: integer("progress").notNull().default(0),
+  fileKey: text("file_key"),
+  contentSha: text("content_sha"),
+  keyWrapped: jsonb("key_wrapped").$type<Record<string, string>>(),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  error: text("error"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  lastAccessedAt: timestamp("last_accessed_at", { withTimezone: true }),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
 });
 
 export const discussionVotes = pgTable(

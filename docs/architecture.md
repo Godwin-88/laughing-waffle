@@ -1,6 +1,6 @@
 # Architecture
 
-Scope delivered through **Sprint 9** of the master specification, with diagrams for key flows.
+Scope delivered through **Sprint 10** of the master specification, with diagrams for key flows.
 
 ## Delivered scope
 
@@ -15,6 +15,7 @@ Scope delivered through **Sprint 9** of the master specification, with diagrams 
 | **7 — Admin & GDPR** | Admin panel: user management (search/filter, role & status changes with last-active tracking, bulk suspend, force password reset, CSV export, audit log per action) + platform configuration (branding, email sender, maintenance mode → global 503, payment-gateway toggles enforced at checkout, feature flags e.g. certificates, revision snapshots + rollback, Redis-backed 60s propagation). GDPR (US-7.2.1): self-service export (ZIP: profile, enrolments, progress, quiz attempts, gradebook, orders, certificates, analytics) and delete (PII scrub, `deleted` status, row retained for stats), email-confirmed opaque tokens, admin-on-behalf flows with export-prerequisite | US-7.1.x, US-7.2.1 |
 | **8 — Discussions & Notifications** | Threaded per-lesson course discussion (US-6.1.1): top-level posts + 2-level replies, upvotes with local toggle state, edit-own, instructor/admin moderation (hide/unhide with reason, delete), enrolled/owner-only access, ILIKE search across the course. In-app + email notifications (US-10.1.1): per-type preferences (8 toggles incl. marketing), unread badge + bell dropdown, mark-read/read-all, instructor announcements to enrolled learners, one-click CAN-SPAM unsubscribe link | US-6.1.1, US-10.1.1 |
 | **9 — LTI, Public API & Analytics** | OAuth 2.0 client-credentials (US-8.1.1): admin-managed API clients, token endpoint outside the versioned surface, per-key hourly rate limit (Redis INCR or in-memory fallback, 429 + Retry-After), public catalogue read with field projection, OpenAPI 3.1 docs. LTI 1.3 Tool Provider (US-8.1.2): platform registration CRUD, OIDC login-initiation → signed id_token launch → one-time launch ticket → session bootstrap, public JWKS, AGS grade passback (score POST to platform within 60s with an RS256 tool JWT, ledger rows). Learner analytics (US-9.1.1): activity heartbeat sink, GitHub-style streak, 90-day heatmap, hours-learned KPIs, in-progress + recommended, admin-guarded dashboard API | US-8.1.1, US-8.1.2, US-9.1.1 |
+| **10 — SAML, Bulk & Offline** | SAML 2.0 service provider (US-1.1.3): IdP registration by pasting metadata XML (entity/issuer/SSO URL/X.509 + role-attribute mapping), public SP metadata endpoint, login redirect to the IdP, ACS JIT provisioning, pause/activate/refresh/delete with audit, admin-guarded. Admin bulk enrolment (US-2.2.3): CSV (`email`, `course_id`, optional `cohort_name`, `expiry_date`) or JSON rows, two-phase preview → async job, partial success with per-row reasons, 5,000-row cap, completion email to the admin with report. Offline lesson downloads (US-3.1.2): enrolled-only, AES-256-GCM bundle with the content key wrapped (HKDF) to the requesting device (`TAKOF1` magic + iv/tag), 30-day or enrolment-bound expiry, queue status + signed file URL + cancel | US-1.1.3, US-2.2.3, US-3.1.2 |
 
 ## Runtime map
 
@@ -43,13 +44,16 @@ flowchart LR
         OACLI["oauth admin — US-8.1.1<br/>clients, rotate, revoke"]
         LTIA["lti admin — US-8.1.2<br/>registrations, grade ledger"]
         ANL["analytics — US-9.1.1<br/>dashboard, heartbeat"]
+        SAML["saml — US-1.1.3<br/>providers, metadata, acs"]
+        BULK["bulk-enrolment — US-2.2.3<br/>preview, jobs, rows"]
+        OFF["offline — US-3.1.2<br/>downloads, files, cancel"]
         LTI["lti public — US-8.1.2<br/>login, launch, jwks, session"]
         PUB["public-api — US-8.1.1<br/>OAuth catalogue + rate limit"]
         AUTH_PLUGIN["auth plugin<br/>(Bearer JWT + DB check)"]
     end
 
     NEXT --> AUTH_PLUGIN
-    NEXT --> AUTH & PROF & CAT & ENR & VID & MEDIA & BLD & QUIZ & SSE & ORD & CERT & ADM & GDPR & DISC & NOTIF & OACLI & LTIA & ANL
+    NEXT --> AUTH & PROF & CAT & ENR & VID & MEDIA & BLD & QUIZ & SSE & ORD & CERT & ADM & GDPR & DISC & NOTIF & OACLI & LTIA & ANL & SAML & BULK & OFF
 
     AUTH & PROF --> PG[("PostgreSQL 16")]
     CAT --> PG
@@ -62,6 +66,8 @@ flowchart LR
     CERT --> PG
     CERT --> STORE
     ADM --> PG
+    ADM --> PG
+    GDPR --> PG
     GDPR --> PG
     GDPR --> STORE
     ADM --> REDIS[("Redis 7<br/>config cache, 60s TTL")]
@@ -583,7 +589,7 @@ gantt
     SAML SSO, bulk enrolment, offline :s10, after s9, 7d
 ```
 
-**Done:** Sprints 1–9 · **Next:** Sprint 10 (SAML SSO, bulk enrolment, offline).
+**Done:** Sprints 1–10 (all sprints in the master specification's backlog are delivered). **Next:** hardening — production deployment, observability, and scale-out of the notification/video worker queues.
 
 ## Discussions & notifications (Sprint 8 — US-6.1.1, US-10.1.1)
 
@@ -730,4 +736,107 @@ sequenceDiagram
     A->>PG: 90-day heatmap + in-progress enrolments
     A->>PG: category-based recommendations (catalogue filters)
     A-->>W: "200 LearnerAnalytics { kpis, heatmap, inProgress, recommended }"
+```
+
+## SAML SSO, bulk enrolment & offline downloads (Sprint 10 — US-1.1.3, US-2.2.3, US-3.1.2)
+
+```mermaid
+flowchart LR
+    subgraph Admin["Admin (US-2.2.3, US-1.1.3)"]
+        A1["POST /bulk-enrolments/preview"] --> V["parse + validate (no writes), 5,000-row cap"]
+        V --> R["report: valid / invalid + reasons"]
+        R --> A2["POST /bulk-enrolments/jobs"]
+        A2 --> Q["async job: JIT-skip unknown, enrol valid"]
+        Q --> E["completion email + job detail"]
+    end
+```
+
+```mermaid
+flowchart LR
+    subgraph Learner["Learner (US-3.1.2, US-1.1.3)"]
+        L1["GET /saml/providers/public"] --> L2["GET /saml/login/:id -> IdP"]
+        L2 --> L3["ACS: POST /saml/acs (SAMLResponse)"]
+        L3 --> L4["provision + session (JIT)"]
+        L5["POST /offline/downloads {lessonId, deviceId}"] --> L6["AES-256-GCM bundle, content key wrapped to device"]
+        L6 --> L7["status ready -> GET /offline/downloads/:id/file"]
+    end
+```
+
+### SAML SSO (US-1.1.3)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as Learner
+    actor A as Admin
+    participant W as Next.js web
+    participant X as Fastify API
+    participant P as PostgreSQL
+    participant I as Identity Provider
+
+    Note over A,X: Admin registers the IdP by pasting metadata XML
+    A->>W: Settings → SAML SSO → Register provider
+    W->>X: POST /api/v1/saml/providers {metadata_xml}
+    X->>P: parse issuer/SSO URL/X.509 + store provider
+    X-->>A: 201 provider (status active)
+
+    Note over U,I: Login begins on the learner sign-in page
+    U->>X: GET /api/v1/saml/login/:id
+    X-->>I: 302 redirect to IdP SSO URL
+    U->>I: Authenticate at the IdP
+    I-->>X: POST /api/v1/saml/acs (SAMLResponse)
+    X->>X: verify signature + issuer, map lms_role attribute
+    X->>P: upsert user (JIT) if unknown
+    X-->>U: set refresh cookie + redirect to dashboard
+```
+
+### Admin bulk enrolment (US-2.2.3)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor A as Admin
+    participant W as Next.js web
+    participant X as Fastify API
+    participant P as PostgreSQL
+
+    A->>W: Paste CSV (email, course_id, cohort_name?, expiry_date?)
+    W->>X: POST /api/v1/bulk-enrolments/preview
+    X->>P: validate rows (dedupe, email format, cap 5,000)
+    X-->>W: 200 { total, valid, invalid, rows[] }
+    A->>W: Confirm → Create job
+    W->>X: POST /api/v1/bulk-enrolments/jobs
+    X->>P: insert job + rows (valid only)
+    X-->>W: 202 job summary
+    Note over X,P: async worker processes valid rows
+    X->>P: enrol matching active accounts, skip unknown
+    X->>P: mark job completed + report
+    A->>X: GET /api/v1/bulk-enrolments/jobs/:id
+    X-->>A: 200 detail + per-row report
+```
+
+### Offline lesson downloads (US-3.1.2)
+
+```mermaid
+flowchart LR
+    L["Learner on lesson page"] --> C["POST /offline/downloads
+   { lessonId, deviceId }"]
+    C --> G{AES-256-GCM gate}
+    G -->|enrolled + flag on| E["encrypt bundle, wrap key for device"]
+    E --> S["status ready, signed file URL"]
+    S --> D["GET /offline/downloads/:id/file
+   (downloads .takwimu bundle)"]
+    G -->|not enrolled| X["403 forbidden"]
+```
+
+### Offline bandits: expiry & device binding
+
+```mermaid
+gantt
+    title Offline download lifecycle
+    dateFormat  YYYY-MM-DD
+    section Download
+    Encrypt + wrap key       :a1, 2026-09-16, 1d
+    Downloaded (device-bound) :a2, 2026-09-17, 30d
+    Expires (30d/ enrolment)  :a3, 2026-10-17, 1d
 ```
