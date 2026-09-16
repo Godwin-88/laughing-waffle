@@ -1,6 +1,6 @@
 # Architecture
 
-Scope delivered through **Sprint 8** of the master specification, with diagrams for key flows.
+Scope delivered through **Sprint 9** of the master specification, with diagrams for key flows.
 
 ## Delivered scope
 
@@ -14,6 +14,7 @@ Scope delivered through **Sprint 8** of the master specification, with diagrams 
 | **6 — Checkout & Payments** | Paid orders (Stripe / M-Pesa Daraja STK / PayPal adapters plug into one server-side confirm path), mock-mode end-to-end payments, order numbers + receipts (`TDS-…`), confirmation polling, and the certificate programme (eligibility gate = all lessons + passed quizzes → idempotent issue → PDF via pdfkit → public verification + LinkedIn deep link) | US-2.2.2, US-5.1.2 |
 | **7 — Admin & GDPR** | Admin panel: user management (search/filter, role & status changes with last-active tracking, bulk suspend, force password reset, CSV export, audit log per action) + platform configuration (branding, email sender, maintenance mode → global 503, payment-gateway toggles enforced at checkout, feature flags e.g. certificates, revision snapshots + rollback, Redis-backed 60s propagation). GDPR (US-7.2.1): self-service export (ZIP: profile, enrolments, progress, quiz attempts, gradebook, orders, certificates, analytics) and delete (PII scrub, `deleted` status, row retained for stats), email-confirmed opaque tokens, admin-on-behalf flows with export-prerequisite | US-7.1.x, US-7.2.1 |
 | **8 — Discussions & Notifications** | Threaded per-lesson course discussion (US-6.1.1): top-level posts + 2-level replies, upvotes with local toggle state, edit-own, instructor/admin moderation (hide/unhide with reason, delete), enrolled/owner-only access, ILIKE search across the course. In-app + email notifications (US-10.1.1): per-type preferences (8 toggles incl. marketing), unread badge + bell dropdown, mark-read/read-all, instructor announcements to enrolled learners, one-click CAN-SPAM unsubscribe link | US-6.1.1, US-10.1.1 |
+| **9 — LTI, Public API & Analytics** | OAuth 2.0 client-credentials (US-8.1.1): admin-managed API clients, token endpoint outside the versioned surface, per-key hourly rate limit (Redis INCR or in-memory fallback, 429 + Retry-After), public catalogue read with field projection, OpenAPI 3.1 docs. LTI 1.3 Tool Provider (US-8.1.2): platform registration CRUD, OIDC login-initiation → signed id_token launch → one-time launch ticket → session bootstrap, public JWKS, AGS grade passback (score POST to platform within 60s with an RS256 tool JWT, ledger rows). Learner analytics (US-9.1.1): activity heartbeat sink, GitHub-style streak, 90-day heatmap, hours-learned KPIs, in-progress + recommended, admin-guarded dashboard API | US-8.1.1, US-8.1.2, US-9.1.1 |
 
 ## Runtime map
 
@@ -39,11 +40,16 @@ flowchart LR
         GDPR["gdpr — US-7.2.1<br/>export, delete, confirm"]
         DISC["discussions — US-6.1.1<br/>threads, votes, moderation"]
         NOTIF["notifications — US-10.1.1<br/>in-app, prefs, announce, unsubscribe"]
+        OACLI["oauth admin — US-8.1.1<br/>clients, rotate, revoke"]
+        LTIA["lti admin — US-8.1.2<br/>registrations, grade ledger"]
+        ANL["analytics — US-9.1.1<br/>dashboard, heartbeat"]
+        LTI["lti public — US-8.1.2<br/>login, launch, jwks, session"]
+        PUB["public-api — US-8.1.1<br/>OAuth catalogue + rate limit"]
         AUTH_PLUGIN["auth plugin<br/>(Bearer JWT + DB check)"]
     end
 
     NEXT --> AUTH_PLUGIN
-    NEXT --> AUTH & PROF & CAT & ENR & VID & MEDIA & BLD & QUIZ & SSE & ORD & CERT & ADM & GDPR & DISC & NOTIF
+    NEXT --> AUTH & PROF & CAT & ENR & VID & MEDIA & BLD & QUIZ & SSE & ORD & CERT & ADM & GDPR & DISC & NOTIF & OACLI & LTIA & ANL
 
     AUTH & PROF --> PG[("PostgreSQL 16")]
     CAT --> PG
@@ -62,6 +68,12 @@ flowchart LR
     DISC --> PG
     NOTIF --> PG
     NOTIF --> REDIS
+    OACLI --> PG
+    LTIA --> PG
+    ANL --> PG
+    LTI --> PG
+    PUB --> PG
+    PUB --> REDIS
     VID --> TRANSCODER["FFmpeg worker"]
     TRANSCODER --> STORE["Storage<br/>local | B2"]
     MEDIA --> STORE
@@ -571,7 +583,7 @@ gantt
     SAML SSO, bulk enrolment, offline :s10, after s9, 7d
 ```
 
-**Done:** Sprints 1–8 · **Next:** Sprint 9 (LTI 1.3 US-8.1.2 · API US-8.1.1 · Analytics US-9.1.1).
+**Done:** Sprints 1–9 · **Next:** Sprint 10 (SAML SSO, bulk enrolment, offline).
 
 ## Discussions & notifications (Sprint 8 — US-6.1.1, US-10.1.1)
 
@@ -623,4 +635,99 @@ sequenceDiagram
     L->>E: Click Unsubscribe
     E->>A: GET /notifications/unsubscribe?userId=...
     A->>P: all notification types → false
+```
+## LTI, public API & learner analytics (Sprint 9 — US-8.1.1, US-8.1.2, US-9.1.1)
+
+### OAuth 2.0 client-credentials catalogue API (US-8.1.1)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor P as Partner system
+    actor Adm as Platform admin
+    participant N as Next.js admin console
+    participant A as Fastify API
+    participant R as Redis
+    participant PG as PostgreSQL
+
+    Note over Adm,A: Admin provisions a machine-to-machine client
+    Adm->>N: POST /admin/api-clients (name, scopes)
+    N->>A: POST /api/v1/oauth/clients (Bearer admin)
+    A->>PG: insert oauth_clients + record audit
+    A-->>N: "201 { client, clientSecret (one-time) }"
+
+    Note over P,A: Partner obtains an access token (client_credentials)
+    P->>A: POST /api/oauth/token { grant_type, client_id, client_secret }
+    A->>PG: verify hash, check status = active & scope grants
+    A->>PG: record last_used_at
+    A-->>P: "200 OAuthTokenResponse { access_token, expires_in }"
+
+    Note over P,A: Public catalogue read with field projection
+    P->>A: GET /api/v1/public/courses?fields=slug,title (Bearer)
+    A->>R: INCR rl:oauth:{client}:{hour}
+    A-->>P: "429 + Retry-After" alt quota exceeded
+    A->>PG: ranked search + pagination
+    A-->>P: "200 { total, page, items[projected fields] }"
+```
+
+### LTI 1.3 tool provider (US-8.1.2)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Adm as Platform admin
+    participant P as LMS platform (Canvas/Moodle)
+    participant B as Browser (learner)
+    participant A as Fastify API
+    participant PG as PostgreSQL
+    participant W as Next.js web
+
+    Note over Adm: Admin registers the platform (US-8.1.2)
+    Adm->>A: POST /api/v1/lti/registrations { issuer, clientId, urls }
+    A->>PG: insert lti_registrations + audit
+
+    Note over P,W: OIDC login initiation
+    P->>A: GET /api/lti/login?iss&client_id&login_hint&target_link_uri
+    A->>PG: create launch row (state, nonce)
+    A-->>P: 302 platform OIDC auth endpoint
+
+    Note over P,W: Signed id_token launch
+    P->>A: POST /api/lti/launch { id_token, state }
+    A->>P: fetch platform JWKS, verify RS256 signature & nonce
+    A->>PG: resolve/create learner, upsert enrolment
+    A-->>W: HTML auto-post form → SPA (one-time launch ticket, 60s)
+
+    Note over B,W: Session bootstrap
+    W->>A: POST /api/lti/session { ticket }
+    A->>PG: consume ticket, set refresh cookie
+    A-->>W: "200 { accessToken, user, targetUrl }"
+
+    Note over P,A: AGS grade passback (quiz submit)
+    A->>A: pushGradeToPlatform (RS256 tool JWT, 300s)
+    A->>P: POST {agsLineItemUrl}/scores (scoreGiven/Maximum)
+    A->>PG: lti_grades row → status pushed|failed
+```
+
+### Learner analytics (US-9.1.1)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor L as Learner
+    participant W as Next.js web
+    participant A as Fastify API
+    participant PG as PostgreSQL
+
+    Note over L,A: Activity heartbeat on any lesson view
+    W->>A: POST /api/v1/analytics/heartbeat { kind, courseId, lessonId, seconds }
+    A->>PG: update users.last_active_at
+    A->>PG: insert analytics_events (activity_heartbeat)
+    A-->>W: "200 { ok: true, streakDays }"
+
+    Note over L,A: Dashboard pulls aggregated KPIs
+    W->>A: GET /api/v1/analytics/dashboard (Bearer)
+    A->>PG: KPI aggregates (hours, streak, certificates)
+    A->>PG: 90-day heatmap + in-progress enrolments
+    A->>PG: category-based recommendations (catalogue filters)
+    A-->>W: "200 LearnerAnalytics { kpis, heatmap, inProgress, recommended }"
 ```

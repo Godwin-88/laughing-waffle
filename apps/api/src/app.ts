@@ -25,6 +25,12 @@ import { registerAdminRoutes } from "./modules/admin/routes";
 import { registerDiscussionRoutes } from "./modules/discussions/routes";
 import { registerNotificationRoutes, registerNotificationPreferencesRoute } from "./modules/notifications/routes";
 import { installMaintenanceGuard } from "./modules/admin/guard";
+import { registerAnalyticsRoutes } from "./modules/analytics/routes";
+import { registerOAuthRoutes } from "./modules/oauth/routes";
+import { registerOAuthAdminRoutes } from "./modules/oauth/admin-routes";
+import { registerPublicApiRoutes } from "./modules/public-api/routes";
+import { registerDocsRoutes } from "./modules/public-api/openapi";
+import { registerLtiRoutes, registerLtiAdminRoutes } from "./modules/lti/routes";
 import { getStorage } from "./storage/storage";
 
 export interface BuildOptions {
@@ -126,9 +132,48 @@ export async function buildApp(opts: BuildOptions = {}) {
           // US-10.1.1 one-click unsubscribe (CAN-SPAM / GDPR Art. 21) — the
           // web UI deep-links here as `/settings/notifications?unsubscribe=1`.
           registerNotificationPreferencesRoute(v1);
+          // US-9.1.1 — learner analytics dashboard + activity heartbeat.
+          registerAnalyticsRoutes(v1);
+          // US-8.1.2 — LTI admin (registration CRUD + AGS grade ledger).
+          registerLtiAdminRoutes(v1);
+          // US-8.1.1 — OAuth 2.0 client-credentials admin management.
+          registerOAuthAdminRoutes(v1);
         },
         { prefix: "/v1" },
       );
+    },
+    { prefix: "/api" },
+  );
+
+  // ── OAuth 2.0 token endpoint (single, outside the v1 surface) ──
+  await app.register(
+    async (api) => {
+      registerOAuthRoutes(api);
+    },
+    { prefix: "/api" },
+  );
+
+  // ── US-8.1.1 — Public catalogue API (OAuth-protected, rate limited) ──
+  await app.register(
+    async (api) => {
+      installMaintenanceGuard(api);
+      await api.register(registerPublicApiRoutes, { prefix: "/public" });
+    },
+    { prefix: "/api/v1" },
+  );
+
+  // ── US-8.1.1 — OpenAPI 3.1 docs at /api/docs.json and /api/docs ──
+  await app.register(
+    async (api) => {
+      registerDocsRoutes(api);
+    },
+    { prefix: "/api" },
+  );
+
+  // ── US-8.1.2 — LTI 1.3 public endpoints (login/jwks/launch/session) ──
+  await app.register(
+    async (api) => {
+      registerLtiRoutes(api);
     },
     { prefix: "/api" },
   );

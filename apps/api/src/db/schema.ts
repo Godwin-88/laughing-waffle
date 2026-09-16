@@ -546,3 +546,70 @@ export const notificationPreferences = pgTable("notification_preferences", {
   marketing: boolean("marketing").notNull().default(true),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─────────────────────────────────────────────────────────────
+// Sprint 9 — OAuth clients (US-8.1.1) · LTI 1.3 (US-8.1.2)
+// ─────────────────────────────────────────────────────────────
+
+export const oauthClients = pgTable("oauth_clients", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  clientId: text("client_id").notNull().unique(),
+  clientSecretHash: text("client_secret_hash").notNull(),
+  scopes: text("scopes").notNull().default("catalogue:read"),
+  status: text("status").notNull().default("active"),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const ltiRegistrations = pgTable("lti_registrations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  issuer: text("issuer").notNull(),
+  clientId: text("client_id").notNull(),
+  toolName: text("tool_name").notNull().default(""),
+  authLoginUrl: text("auth_login_url"),
+  authTokenUrl: text("auth_token_url"),
+  jwksUrl: text("jwks_url"),
+  platformKeySet: jsonb("platform_key_set").$type<Record<string, unknown>>(),
+  agsLineItemUrl: text("ags_line_item_url"),
+  active: boolean("active").notNull().default(true),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const ltiLaunches = pgTable("lti_launches", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  registrationId: uuid("registration_id")
+    .notNull()
+    .references(() => ltiRegistrations.id, { onDelete: "cascade" }),
+  state: text("state").notNull(),
+  nonce: text("nonce").notNull(),
+  messageType: text("message_type").notNull().default("LtiResourceLinkLaunch"),
+  targetLinkUri: text("target_link_uri"),
+  contextId: text("context_id"),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  courseId: uuid("course_id").references(() => courses.id, { onDelete: "set null" }),
+  lessonId: uuid("lesson_id").references(() => lessons.id, { onDelete: "set null" }),
+  used: boolean("used").notNull().default(false),
+  launchedAt: timestamp("launched_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const ltiGrades = pgTable("lti_grades", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  registrationId: uuid("registration_id")
+    .notNull()
+    .references(() => ltiRegistrations.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  courseId: uuid("course_id").references(() => courses.id, { onDelete: "set null" }),
+  lessonId: uuid("lesson_id").references(() => lessons.id, { onDelete: "set null" }),
+  attemptId: uuid("attempt_id"),
+  scoreGiven: numeric("score_given", { precision: 6, scale: 2 }).notNull(),
+  scoreMaximum: numeric("score_maximum", { precision: 6, scale: 2 }).notNull().default("100"),
+  status: text("status").notNull().default("pending"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  pushedAt: timestamp("pushed_at", { withTimezone: true }),
+});

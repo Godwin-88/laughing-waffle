@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { CourseSummary, EnrolmentSummary } from "@takwimu/shared";
 import { catalogueApi, enrolmentApi, formatPrice, profileApi, skillLabel, subscribeToProgress } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { LearnerAnalytics } from "@/components/LearnerAnalytics";
 
 export default function DashboardPage() {
   const { user, loading } = useAuth();
@@ -184,6 +185,8 @@ export default function DashboardPage() {
           </div>
         )}
       </section>
+
+      <LearnerAnalytics />
     </div>
   );
 }

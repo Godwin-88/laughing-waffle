@@ -5,7 +5,7 @@
 
 A full-stack TypeScript monorepo: **Fastify 5** API, **Next.js 15** web client, shared typed contract layer, Postgres 16 schema + migrations, seeded curriculum, and a self-hosted video pipeline (chunked upload → FFmpeg HLS transcode → enrolment-gated streaming).
 
-- **Sprints 1–8 delivered** — Auth & onboarding · Catalogue & search · Enrolment, progress & video lessons · Course builder & video pipeline · Graded quizzes & real-time progress engine (SSE) · Paid checkout & verified certificates · Admin panel & GDPR (user management + audit, platform config with maintenance/gateway/feature toggles, self-service data export & deletion) · **Course discussions & notifications** (threaded per-lesson Q&A with upvotes + instructor moderation, in-app bell with per-type preferences, announcements, one-click unsubscribe). See [`docs/architecture.md`](docs/architecture.md) for scope and [`docs/development.md`](docs/development.md) for the roadmap.
+- **Sprints 1–9 delivered** — Auth & onboarding · Catalogue & search · Enrolment, progress & video lessons · Course builder & video pipeline · Graded quizzes & real-time progress engine (SSE) · Paid checkout & verified certificates · Admin panel & GDPR (user management + audit, platform config with maintenance/gateway/feature toggles, self-service data export & deletion) · Course discussions & notifications (threaded per-lesson Q&A with upvotes + instructor moderation, in-app bell with per-type preferences, announcements, one-click unsubscribe) · **LTI 1.3, public API & analytics** (OAuth 2.0 client-credentials catalogue API with per-key rate limits + OpenAPI docs, LTI 1.3 tool provider: OIDC login/launch/JWKS + AGS grade passback, and a learner analytics dashboard with streak/heatmap/KPIs). See [`docs/architecture.md`](docs/architecture.md) for scope and [`docs/development.md`](docs/development.md) for the roadmap.
 
 ```mermaid
 flowchart LR
@@ -13,7 +13,7 @@ flowchart LR
         W["App Router pages + client components<br/>VideoPlayer · EnrollCard · Studio · Dashboard"]
     end
     subgraph API["apps/api · Fastify 5 (:4000 /api/v1)"]
-        M["Modules<br/>auth · profile · catalogue · enrolments · video · builder<br/>quizzes · checkout · certificates · admin · gdpr<br/>discussions · notifications"]
+        M["Modules<br/>auth · profile · catalogue · enrolments · video · builder<br/>quizzes · checkout · certificates · admin · gdpr<br/>discussions · notifications · oauth · lti<br/>public-api · analytics"]
         DB[("PostgreSQL 16")]
         S3["Storage<br/>local | Backblaze B2"]
         FF["FFmpeg worker<br/>(HLS ladders)"]

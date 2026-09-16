@@ -9,6 +9,7 @@ import { MarkCompleteButton } from "@/components/MarkCompleteButton";
 import { GradedQuiz } from "@/components/GradedQuiz";
 import { TextLessonCompletion } from "@/components/TextLessonCompletion";
 import { DiscussionBoard } from "@/components/DiscussionBoard";
+import { ActivityHeartbeat } from "@/components/ActivityHeartbeat";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ export default async function LessonPage({ params }: Props) {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
+      <ActivityHeartbeat kind={lesson.kind as "lesson"} courseId={lesson.courseId} lessonId={lesson.id} />
       <nav className="text-sm text-ink-500">
         <Link href={`/courses/${slug}`} className="hover:text-brand-700">
           ← Course overview

@@ -92,6 +92,12 @@ Google and Microsoft flows are scaffolded in `apps/api/src/modules/auth/sso.ts`:
 - The in-app bell polls `GET /notifications` every 60 s and on open; unread counts are real-time within that window.
 - Feature flag `features.discussions` (admin → Settings → Features) disables the discussion UI + endpoints; it is `true` by default in `defaultConfig()`.
 
+## LTI, public API & analytics (Sprint 9)
+
+- **Public catalogue API** — `PUBLIC_API_URL` (already in `.env.example`) becomes the base for external links; `PUBLIC_API_RATE_LIMIT_PER_HOUR` (default `1000`) drives the per-key 429. OAuth tokens are HS256-signed with the same `JWT_SECRET` (aud `takwimu:public-api`), so rotate `JWT_SECRET` to invalidate old keys too.
+- **LTI 1.3** — keypair auto-generates on first boot and persists under `apps/api/.data/lti-jwks.json`; add the tool to the LMS with `https://<host>/api/lti/login`, `/api/lti/launch`, `/api/lti/jwks`. Register each platform in `/admin/lti` (issuer + client id + platform OIDC/token/JWKS/AGS URLs).
+- **Analytics** — heartbeats write to `analytics_events`; no extra env vars. A dev-only helper `GET /api/v1/analytics/dashboard` shows the same KPIs the learner sees.
+
 ## Security checklist for production
 
 - `JWT_SECRET` at least 32 random characters, stored in the secret manager, rotated on deploy.

@@ -92,6 +92,14 @@ export default function AdminOverviewPage() {
           <p className="text-lg font-bold text-ink-900">GDPR requests</p>
           <p className="mt-1 text-sm text-ink-600">Oversee all data-export and deletion requests across the platform (US-7.2.1).</p>
         </Link>
+        <Link href="/admin/api-clients" className="rounded-2xl border border-ink-200 bg-white p-6 shadow-sm transition hover:border-brand-300 hover:shadow">
+          <p className="text-lg font-bold text-ink-900">API keys</p>
+          <p className="mt-1 text-sm text-ink-600">OAuth 2.0 client-credentials for partners consuming the public course catalogue (US-8.1.1).</p>
+        </Link>
+        <Link href="/admin/lti" className="rounded-2xl border border-ink-200 bg-white p-6 shadow-sm transition hover:border-brand-300 hover:shadow">
+          <p className="text-lg font-bold text-ink-900">LTI integrations</p>
+          <p className="mt-1 text-sm text-ink-600">Register Canvas/Moodle/Blackboard as LTI 1.3 platforms for deep-link launches and grade passback (US-8.1.2).</p>
+        </Link>
       </div>
     </main>
   );

@@ -1,6 +1,10 @@
 import type {
   AdminUserListResponse,
   AdminUserRow,
+  ActivityHeartbeatPayload,
+  ActivityHeartbeatResponse,
+  ApiClientListResponse,
+  ApiClientRow,
   ApiErrorPayload,
   AppNotification,
   AuditLogListResponse,
@@ -19,7 +23,10 @@ import type {
   CourseProgressResponse,
   CreateCoursePayload,
   CreateDiscussionPostPayload,
+  CreateApiClientPayload,
+  CreateApiClientResponse,
   CreateLessonPayload,
+  CreateLtiRegistrationPayload,
   CreateModulePayload,
   CreateOrderPayload,
   DataRequestListResponse,
@@ -32,6 +39,10 @@ import type {
   GdprActionResponse,
   GdprConfirmResponse,
   LessonPublic,
+  LearnerAnalytics,
+  LtiGradesResponse,
+  LtiRegistrationListResponse,
+  LtiRegistrationRow,
   ModerateDiscussionPostPayload,
   NotificationListResponse,
   NotificationPreferences,
@@ -50,6 +61,7 @@ import type {
   UnreadCountResponse,
   UpdateCoursePayload,
   UpdateLessonPayload,
+  UpdateLtiRegistrationPayload,
   UpdateModulePayload,
   UserRole,
   UserStatus,
@@ -698,5 +710,61 @@ export const notificationsApi = {
     payload: { title: string; body: string; link?: string; type?: NotificationType },
   ): Promise<{ sent: number }> {
     return api(`/courses/${slug}/announcements`, { method: "POST", body: JSON.stringify(payload) });
+  },
+};
+
+/**
+ * Sprint 9 — learner analytics (US-9.1.1). Heartbeats power the streak,
+ * heatmap and hours-learned KPIs on the dashboard.
+ */
+export const analyticsApi = {
+  async dashboard(): Promise<LearnerAnalytics> {
+    return api("/analytics/dashboard");
+  },
+  async heartbeat(payload: ActivityHeartbeatPayload): Promise<ActivityHeartbeatResponse> {
+    return api("/analytics/heartbeat", { method: "POST", body: JSON.stringify(payload) });
+  },
+};
+
+/**
+ * Sprint 9 — OAuth 2.0 client-credentials API keys (US-8.1.1).
+ * Admin-only management of machine-to-machine clients.
+ */
+export const oauthAdminApi = {
+  async list(): Promise<ApiClientListResponse> {
+    return api("/oauth/clients");
+  },
+  async create(payload: CreateApiClientPayload): Promise<CreateApiClientResponse> {
+    return api("/oauth/clients", { method: "POST", body: JSON.stringify(payload) });
+  },
+  async rotate(clientId: string): Promise<{ clientSecret: string }> {
+    return api(`/oauth/clients/${encodeURIComponent(clientId)}/rotate`, { method: "POST", body: JSON.stringify({}) });
+  },
+  async revoke(clientId: string): Promise<{ ok: true }> {
+    return api(`/oauth/clients/${encodeURIComponent(clientId)}/revoke`, { method: "POST", body: JSON.stringify({}) });
+  },
+};
+
+/**
+ * Sprint 9 — LTI 1.3 tool provider registrations (US-8.1.2).
+ * Admins register each originating LMS (issuer/client id) here.
+ */
+export const ltiAdminApi = {
+  async list(): Promise<LtiRegistrationListResponse> {
+    return api("/lti/registrations");
+  },
+  async create(payload: CreateLtiRegistrationPayload): Promise<LtiRegistrationRow> {
+    return api("/lti/registrations", { method: "POST", body: JSON.stringify(payload) });
+  },
+  async update(id: string, payload: UpdateLtiRegistrationPayload): Promise<LtiRegistrationRow> {
+    return api(`/lti/registrations/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+  },
+  async remove(id: string): Promise<{ ok: true }> {
+    return api(`/lti/registrations/${id}`, { method: "DELETE" });
+  },
+  async grades(registrationId: string | null): Promise<LtiGradesResponse> {
+    return registrationId
+      ? api(`/lti/registrations/${registrationId}/grades`)
+      : api(`/lti/grades`);
   },
 };

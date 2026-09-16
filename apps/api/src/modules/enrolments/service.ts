@@ -51,7 +51,7 @@ interface CourseProgressStats {
   nextLessonPosition: number | null;
 }
 
-async function courseProgressStats(
+export async function courseProgressStats(
   courseId: string,
   userId: string | null,
 ): Promise<CourseProgressStats> {

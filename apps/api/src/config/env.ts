@@ -45,6 +45,12 @@ export interface Env {
   PAYPAL_CLIENT_ID: string | null;
   PAYPAL_CLIENT_SECRET: string | null;
   PAYPAL_WEBHOOK_ID: string | null;
+  /** Optional PEM private key for the LTI 1.3 tool (US-8.1.2). Generated at boot otherwise. */
+  LTI_PRIVATE_KEY: string | null;
+  /** Optional fixed kid for the LTI JWK; derived thumbprint otherwise. */
+  LTI_KID: string | null;
+  /** Per-client hourly limit for the OAuth-protected public API (US-8.1.1). */
+  PUBLIC_API_RATE_LIMIT_PER_HOUR: number;
 }
 
 const API_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."); // apps/api
@@ -135,6 +141,9 @@ export function loadEnv(): Env {
     PAYPAL_CLIENT_ID: optional("PAYPAL_CLIENT_ID"),
     PAYPAL_CLIENT_SECRET: optional("PAYPAL_CLIENT_SECRET"),
     PAYPAL_WEBHOOK_ID: optional("PAYPAL_WEBHOOK_ID"),
+    LTI_PRIVATE_KEY: optional("LTI_PRIVATE_KEY"),
+    LTI_KID: optional("LTI_KID"),
+    PUBLIC_API_RATE_LIMIT_PER_HOUR: Math.max(1, Number(optional("PUBLIC_API_RATE_LIMIT_PER_HOUR") ?? 1000)),
   };
   return cached!;
 }

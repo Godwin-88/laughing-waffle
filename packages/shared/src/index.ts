@@ -939,3 +939,172 @@ export interface AnnouncementPayload {
 export interface AnnouncementResult {
   sent: number;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Sprint 9 — OAuth 2.0 client credentials (US-8.1.1)
+// ─────────────────────────────────────────────────────────────
+
+/** OAuth token endpoint response (`grant_type=client_credentials`). */
+export interface OAuthTokenResponse {
+  access_token: string;
+  token_type: "Bearer";
+  expires_in: number;
+  scope: string;
+}
+
+export interface ApiClientRow {
+  id: string;
+  name: string;
+  clientId: string;
+  scopes: string;
+  status: "active" | "revoked";
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+export interface ApiClientListResponse {
+  items: ApiClientRow[];
+  total: number;
+}
+
+export interface CreateApiClientPayload {
+  name: string;
+  scopes?: string;
+}
+
+/** One-time plaintext secret returned at creation. */
+export interface CreateApiClientResponse {
+  client: ApiClientRow;
+  clientSecret: string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sprint 9 — LTI 1.3 Tool Provider (US-8.1.2)
+// ─────────────────────────────────────────────────────────────
+
+export interface LtiRegistrationRow {
+  id: string;
+  issuer: string;
+  clientId: string;
+  toolName: string;
+  authLoginUrl: string | null;
+  authTokenUrl: string | null;
+  jwksUrl: string | null;
+  agsLineItemUrl: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LtiRegistrationListResponse {
+  items: LtiRegistrationRow[];
+  total: number;
+}
+
+export interface CreateLtiRegistrationPayload {
+  issuer: string;
+  clientId: string;
+  toolName?: string;
+  authLoginUrl?: string;
+  authTokenUrl?: string;
+  jwksUrl?: string;
+  platformKeySetJson?: string;
+  agsLineItemUrl?: string;
+  active?: boolean;
+}
+
+export interface UpdateLtiRegistrationPayload {
+  toolName?: string;
+  authLoginUrl?: string;
+  authTokenUrl?: string;
+  jwksUrl?: string;
+  platformKeySetJson?: string;
+  agsLineItemUrl?: string;
+  active?: boolean;
+}
+
+export interface LtiLaunchRow {
+  id: string;
+  registrationId: string;
+  messageType: string;
+  contextId: string | null;
+  userId: string | null;
+  courseId: string | null;
+  lessonId: string | null;
+  used: boolean;
+  launchedAt: string;
+  expiresAt: string;
+}
+
+export interface LtiGradesResponse {
+  items: Array<{
+    id: string;
+    registrationId: string;
+    userId: string;
+    courseId: string | null;
+    lessonId: string | null;
+    attemptId: string | null;
+    scoreGiven: string;
+    scoreMaximum: string;
+    status: "pending" | "pushed" | "failed";
+    error: string | null;
+    createdAt: string;
+    pushedAt: string | null;
+  }>;
+  total: number;
+}
+
+export interface LtiJwksResponse {
+  keys: Array<Record<string, unknown>>;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sprint 9 — learner analytics (US-9.1.1)
+// ─────────────────────────────────────────────────────────────
+
+export interface AnalyticsKpis {
+  coursesEnrolled: number;
+  coursesCompleted: number;
+  hoursLearnedWeek: number;
+  hoursLearnedTotal: number;
+  activeStreakDays: number;
+  certificatesEarned: number;
+}
+
+export interface HeatmapDay {
+  date: string; // yyyy-mm-dd
+  count: number;
+}
+
+export interface AnalyticsInProgressCourse {
+  courseId: string;
+  courseSlug: string;
+  courseTitle: string;
+  category: string;
+  categoryLabel: string;
+  instructor: string;
+  progressPercent: number;
+  lastAccessedAt: string | null;
+  firstLessonPosition: number | null;
+  nextLessonPosition: number | null;
+}
+
+export interface LearnerAnalytics {
+  kpis: AnalyticsKpis;
+  heatmap: HeatmapDay[];
+  inProgress: AnalyticsInProgressCourse[];
+  recommended: CourseSummary[];
+}
+
+export interface ActivityHeartbeatPayload {
+  kind: "lesson" | "video" | "quiz" | "discussion";
+  courseId?: string;
+  lessonId?: string;
+  /** Fractional minutes actually spent, 0 < seconds <= 3600. */
+  seconds: number;
+}
+
+export interface ActivityHeartbeatResponse {
+  ok: true;
+  streakDays: number;
+}

@@ -201,6 +201,40 @@ Types: `discussion_reply`, `assignment_graded`, `course_content_added`, `certifi
 
 Emails embed a per-type unsubscribe link; the in-app bell polls every 60 s and on open.
 
+## Public catalogue API — Sprint 9 (US-8.1.1)
+
+Machine-to-machine access protected by OAuth 2.0 **client-credentials**. The token endpoint sits outside the versioned surface; the public catalogue resource itself is served under `/api/v1/public`.
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/api/oauth/token` | client_id + client_secret | Exchange for `{access_token, token_type: Bearer, expires_in: 3600, scope}` (HS256, aud `takwimu:public-api`) |
+| `GET` | `/api/v1/public/courses` | `Bearer` (scope `catalogue:read`) | Ranked search, filters, sort, pagination; `fields=slug,title,…` projects a whitelisted subset |
+| `GET` | `/api/v1/public/courses/:slug` | `Bearer` | Course detail sans syllabus (`fields` supported) |
+| `GET` | `/api/docs.json` / `/api/docs` | — | OpenAPI 3.1 spec + rendered docs page |
+
+All public endpoints honour the per-key hourly rate limit (default 1,000 req/h, Redis or in-memory bucket) → `429` with `Retry-After` on breach, and return OAuth-style `{error, error_description}` bodies on auth failure. Admin key management lives under `/oauth/clients` (US-7.1-style admin guard): `GET/POST`, `POST /:clientId/rotate`, `POST /:clientId/revoke`.
+
+## LTI 1.3 tool provider — Sprint 9 (US-8.1.2)
+
+Public launch surface (versionless, under `/api`); registration & grade ledger management under `/api/v1`.
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/api/lti/login` | platform query params | OIDC login initiation → 302 to platform auth endpoint (launch row with state/nonce) |
+| `POST` | `/api/lti/launch` | signed `id_token` + state | Verify RS256 against the platform JWKS, resolve learner, upsert enrolment, return HTML auto-post form carrying a one-time launch ticket |
+| `POST` | `/api/lti/session` | launch ticket (≤60 s) | Exchange ticket → normal refresh cookie + access token + `targetUrl` for the SPA |
+| `GET` | `/api/lti/jwks` | — | Our tool public key set (RS256, `kid` pinned to the env keypair) |
+| `GET/POST` | `/api/v1/lti/registrations` | admin | List / register an LMS platform (issuer, clientId, OIDC auth + token + JWKS + AGS URLs, optional pasted key-set JSON) |
+| `PATCH/DELETE` | `/api/v1/lti/registrations/:id` | admin | Activate/pause, edit URLs, delete |
+| `GET` | `/api/v1/lti/registrations/:id/grades` · `/api/v1/lti/grades` | admin | AGS grade-passback ledger (`pending`/`pushed`/`failed` + error) |
+
+## Learner analytics — Sprint 9 (US-9.1.1)
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/analytics/dashboard` | bearer | KPI strip (enrolled, completed, hours week/total, streak, certificates), 90-day heatmap, in-progress courses, recommendations |
+| `POST` | `/analytics/heartbeat` | bearer | `{kind: lesson\|video\|quiz\|discussion, courseId?, lessonId?, seconds}` → updates `last_active_at`, inserts an analytics event, returns `{ok, streakDays}` |
+
 ## Health
 
 | Method | Path | Auth | Description |

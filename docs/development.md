@@ -109,6 +109,11 @@ Verified live, end-to-end, in local dev:
 | No in-app notifications | Preferences may be all-off, or the type is disabled — check `GET /notifications/preferences` and the bell dropdown's Mark-all path |
 | Reply notification missing | Replies notify the post author only if their `discussionReply` preference is on; the one-click unsubscribe link sets *all* types false (re-enable in Settings → Notifications) |
 | Instructor can't moderate | The course must have `instructor_id` set — `npm run db:seed` now links every seeded course to `ina@takwimu.dev` |
+| Public API 401 | The `client_id`/`client_secret` pair isn't active (revoked rotates invalidate tokens). Create a key in `/admin/api-clients`, then `POST /api/oauth/token` with `grant_type=client_credentials` |
+| Public API 429 | Hit the hourly per-key limit — wait for the window shown in `Retry-After`, or raise `PUBLIC_API_RATE_LIMIT_PER_HOUR` |
+| `/api/docs.json` 404 | The docs module registers under `/api`; check `registerDocsRoutes` is still wired in `apps/api/src/app.ts` |
+| LTI launch "no keys" | Verify the platform registration's `jwksUrl`/`platformKeySetJson` reachable; key rotation regenerates `apps/api/.data/lti-jwks.json` |
+| Analytics dashboard 401 | `/analytics/*` requires a signed-in learner — heartbeats are only meaningful for active accounts |
 
 ## Deployment sketch
 
